@@ -9,8 +9,8 @@ class Game:
 
     def draw_map(self, screen):
         pygame.event.pump()
-        for start_X, start_Y in border_tuples:
-            pygame.draw.rect(screen, BROWN, (int(start_X), int(start_Y), int(PIXEL_ONE_X), int(PIXEL_ONE_Y)))
+        for tuple in border_tuples:
+            pygame.draw.rect(screen, BROWN, (math.floor(tuple[0][0]), math.floor(tuple[1][0]), int(PIXEL_ONE_X), int(PIXEL_ONE_Y)))
 
     def game_loop(self):
         pygame.init()
@@ -28,7 +28,6 @@ class Game:
             self.draw_map(screen)
             self.test.move(player_pos)
             pygame.draw.circle(screen, "red", player_pos, 20)
-            
             pygame.display.flip()
             clock.tick(60)
 
