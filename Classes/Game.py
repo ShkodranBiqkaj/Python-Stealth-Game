@@ -6,11 +6,22 @@ from Enemy import Enemy
 
 class Game:
     def __init__(self):
+        # Initialize Pygame and set up the display BEFORE creating any objects that load images
+        pygame.init()
+        self.screen = pygame.display.set_mode((SIZE_X, SIZE_Y))
+        pygame.display.set_caption("Stealth Game - BFS Enemy")
+
+        # Create a clock for managing the frame rate
+        self.clock = pygame.time.Clock()
+
+        # Load background image after display is set
+        self.background = pygame.image.load("../Assets/background.jpg").convert()
+
+        # Now that the display is ready, we can create the Player and Enemy
         self.player = Player()
-        # Start enemy near top-left corner, for instance
         self.enemy = Enemy(position=(50, 50), move_speed=3, update_interval=1)
 
-    def draw_map(self, screen):
+    def draw_map(self):
         """
         Draw obstacles using border_tuples.
         You can replace these crate images with any image or color fill.
@@ -23,16 +34,9 @@ class Game:
             rect = pygame.Rect(math.floor(x_start), math.floor(y_start), width, height)
             # Scale crate image to fit each obstacle cell
             scaled_crate = pygame.transform.scale(crate_image, (int(width), int(height)))
-            screen.blit(scaled_crate, rect)
+            self.screen.blit(scaled_crate, rect)
 
     def game_loop(self):
-        pygame.init()
-        screen = pygame.display.set_mode((SIZE_X, SIZE_Y))
-        pygame.display.set_caption("Stealth Game - BFS Enemy")
-
-        clock = pygame.time.Clock()
-        background = pygame.image.load("../Assets/background.jpg").convert()
-
         running = True
         while running:
             # Basic event handling (close window)
@@ -41,10 +45,10 @@ class Game:
                     running = False
 
             # Draw background
-            screen.blit(background, (0, 0))
+            self.screen.blit(self.background, (0, 0))
 
             # Draw obstacles
-            self.draw_map(screen)
+            self.draw_map()
 
             # Player logic
             self.player.move()
@@ -54,14 +58,17 @@ class Game:
             self.enemy.move(player_pos)
             enemy_pos = self.enemy.get_position()
 
-            # Draw the player (red circle)
-            pygame.draw.circle(screen, (255, 0, 0), (int(player_pos[0]), int(player_pos[1])), 15)
+            # Draw the player (sprite instead of circle)
+            self.player.draw(self.screen)
 
             # Draw the enemy (green circle)
-            pygame.draw.circle(screen, (0, 255, 0), (int(enemy_pos[0]), int(enemy_pos[1])), 15)
+            pygame.draw.circle(self.screen, (0, 255, 0), (int(enemy_pos[0]), int(enemy_pos[1])), 15)
 
+            # Update the display
             pygame.display.flip()
-            clock.tick(60)
+
+            # Cap the frame rate at 60 FPS
+            self.clock.tick(60)
 
         pygame.quit()
 
