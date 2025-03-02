@@ -1,43 +1,41 @@
 import pygame
-import numpy as np
+import random
 
 # Initialize Pygame
 pygame.init()
 
-# Constants
-SIZE_X = 1100
+SIZE_X = 1000
 SIZE_Y = 750
-BROWN = (139, 69, 19)  # Brown color for walls
 
-# 4x4 Graph (1 = Path, 0 = Wall)
-graph = np.array([
-    [1, 1, 1, 0],
-    [1, 0, 1, 1],
-    [1, 1, 0, 1],
-    [0, 1, 1, 0]
-])
+# Let's define how many rows and columns the matrix has
+GRID_ROWS = 10
+GRID_COLS = 10
 
-SIZE_OF_X = len(graph[0])  # Columns
-SIZE_OF_Y = len(graph)      # Rows
+PIXEL_ONE_X = SIZE_X / GRID_COLS
+PIXEL_ONE_Y = SIZE_Y / GRID_ROWS
 
-# Width and height of each grid cell
-PIXEL_ONE_X = SIZE_X / SIZE_OF_X
-PIXEL_ONE_Y = SIZE_Y / SIZE_OF_Y
+matrix = [[1 for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
 
-# Set up the display
-screen = pygame.display.set_mode((SIZE_X, SIZE_Y))
-pygame.display.set_caption("Stealth Game - Map")
+# Example: Set the edges to 1
+for i in range(GRID_ROWS):
+    matrix[i][0] = 1
+    matrix[i][GRID_COLS - 1] = 1
+    matrix[0][i] = 1
+    matrix[GRID_ROWS - 1][i] = 1
 
-#2 put all 0 coordinates in an array. as double tuples. so ((start_of_x,end_of_x),(start_of_y,end_of_y))
+# Add some random 0's in the middle
+num_random_ones = 7
+for _ in range(num_random_ones):
+    x, y = random.randint(1, GRID_ROWS - 2), random.randint(1, GRID_COLS - 2)
+    matrix[x][y] = 0
+
+# border_tuples for obstacles
 border_tuples = []
-
-for i in range(SIZE_OF_Y):
-    for j in range(SIZE_OF_X):
-        if(graph[i][j] == 0):
-            start_X = i * PIXEL_ONE_X
-            end_x = start_X + PIXEL_ONE_X
-            X_BORDERS = (start_X, end_x)
-            start_y = j * PIXEL_ONE_Y
-            end_y = start_y + PIXEL_ONE_Y
-            Y_BORDERS = (start_y, end_y)
-            border_tuples.append((X_BORDERS,Y_BORDERS))
+for row in range(GRID_ROWS):
+    for col in range(GRID_COLS):
+        if matrix[row][col] == 0:
+            x_start = col * PIXEL_ONE_X
+            x_end   = x_start + PIXEL_ONE_X
+            y_start = row * PIXEL_ONE_Y
+            y_end   = y_start + PIXEL_ONE_Y
+            border_tuples.append(((x_start, x_end), (y_start, y_end)))
