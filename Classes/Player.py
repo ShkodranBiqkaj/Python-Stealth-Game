@@ -7,34 +7,34 @@ class Player:
         self.images = {
             'down': [
                 pygame.transform.scale(
-                    pygame.image.load("../assets/boy_down_1.png").convert_alpha(), (30, 30)
+                    pygame.image.load("../assets/boy_down_1.png").convert_alpha(), (40, 40)
                 ),
                 pygame.transform.scale(
-                    pygame.image.load("../assets/boy_down_2.png").convert_alpha(), (30, 30)
+                    pygame.image.load("../assets/boy_down_2.png").convert_alpha(), (40, 40)
                 )
             ],
             'up': [
                 pygame.transform.scale(
-                    pygame.image.load("../assets/boy_up_1.png").convert_alpha(), (30, 30)
+                    pygame.image.load("../assets/boy_up_1.png").convert_alpha(), (40, 40)
                 ),
                 pygame.transform.scale(
-                    pygame.image.load("../assets/boy_up_2.png").convert_alpha(), (30, 30)
+                    pygame.image.load("../assets/boy_up_2.png").convert_alpha(), (40, 40)
                 )
             ],
             'left': [
                 pygame.transform.scale(
-                    pygame.image.load("../assets/boy_left_1.png").convert_alpha(), (30, 30)
+                    pygame.image.load("../assets/boy_left_1.png").convert_alpha(), (40, 40)
                 ),
                 pygame.transform.scale(
-                    pygame.image.load("../assets/boy_left_2.png").convert_alpha(), (30, 30)
+                    pygame.image.load("../assets/boy_left_2.png").convert_alpha(), (40, 40)
                 )
             ],
             'right': [
                 pygame.transform.scale(
-                    pygame.image.load("../assets/boy_right_1.png").convert_alpha(), (30, 30)
+                    pygame.image.load("../assets/boy_right_1.png").convert_alpha(), (40, 40)
                 ),
                 pygame.transform.scale(
-                    pygame.image.load("../assets/boy_right_2.png").convert_alpha(), (30, 30)
+                    pygame.image.load("../assets/boy_right_2.png").convert_alpha(), (40, 40)
                 )
             ]
         }

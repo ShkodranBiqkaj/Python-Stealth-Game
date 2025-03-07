@@ -60,9 +60,9 @@ class Game:
 
             # Draw the player (sprite instead of circle)
             self.player.draw(self.screen)
-
+            self.enemy.draw(self.screen)
             # Draw the enemy (green circle)
-            pygame.draw.circle(self.screen, (0, 255, 0), (int(enemy_pos[0]), int(enemy_pos[1])), 15)
+            #pygame.draw.circle(self.screen, (0, 255, 0), (int(enemy_pos[0]), int(enemy_pos[1])), 15)
 
             # Update the display
             pygame.display.flip()
