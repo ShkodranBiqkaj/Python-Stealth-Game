@@ -50,6 +50,25 @@ def create_maze_map(rows, cols):
 
     return maze
 
+
+def unlock_hidden_room(maze):
+    # Suppose we stored the blocked cell as (blocked_r, blocked_c)
+    # For simplicity, let's just search for any cell that is 0 but
+    # neighbors a '2' cell. We turn it into 1.
+    print("Unlocked")
+    rows = len(maze)
+    cols = len(maze[0])
+    for r in range(rows):
+        for c in range(cols):
+            if maze[r][c] == 0:
+                # Check if it neighbors a 2
+                for (dr, dc) in [(-1,0),(1,0),(0,-1),(0,1)]:
+                    nr, nc = r+dr, c+dc
+                    if 0 <= nr < rows and 0 <= nc < cols:
+                        if maze[nr][nc] == 2:
+                            # This is the locked entrance
+                            maze[r][c] = 1
+                            return  # done, we unlocked it
 # --- Pygame Setup ---
 pygame.init()
 
@@ -65,8 +84,20 @@ PIXEL_ONE_Y = SIZE_Y / GRID_ROWS
 # Generate a 5x5 "maze" map
 # 1 = walkable, 0 = blocked
 matrix = create_maze_map(GRID_ROWS, GRID_COLS)
-
 # Create border_tuples for each blocked cell
+
+def find_start():
+    for i in (1,len(matrix)):
+        for j in range(len(matrix[0])):
+            if(matrix[len(matrix)-i][j] == 1):
+                return len(matrix)-i,j
+            
+    return 0,0
+
+player_start_y,player_start_x = find_start()
+print(player_start_x,player_start_y)
+player_start_x = player_start_x * PIXEL_ONE_X
+player_start_y = player_start_y * PIXEL_ONE_Y
 border_tuples = []
 for row in range(GRID_ROWS):
     for col in range(GRID_COLS):

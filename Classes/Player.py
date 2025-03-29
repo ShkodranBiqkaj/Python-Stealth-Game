@@ -1,8 +1,8 @@
 import pygame
-from constants.matrix_sizes import matrix, PIXEL_ONE_X, PIXEL_ONE_Y
+from constants.matrix_sizes import matrix, PIXEL_ONE_X, PIXEL_ONE_Y, unlock_hidden_room
 
 class Player:
-    def __init__(self):
+    def __init__(self, player_pos_x, player_pos_y):
         # Load and scale images for each direction (two images per direction, 30x30)
         self.images = {
             'down': [
@@ -45,8 +45,8 @@ class Player:
         self.current_image = self.images[self.direction][self.current_frame]
 
         # Position and speed
-        self.pos_X = 100
-        self.pos_Y = 100
+        self.pos_X = player_pos_x
+        self.pos_Y = player_pos_y
         self.speed = 4
 
         # Animation timing: switch foot every N frames
@@ -67,6 +67,8 @@ class Player:
         # Compute a potential new position
         new_x, new_y = old_x, old_y
         moved = False
+        if keys[pygame.K_e]:
+            unlock_hidden_room(matrix)
 
         if keys[pygame.K_w]:
             new_y -= self.speed
