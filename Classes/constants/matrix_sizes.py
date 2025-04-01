@@ -1,6 +1,29 @@
 import pygame
 import random
 
+def insert_u_shape_with_connectivity(maze, top_left_row, top_left_col, pattern):
+    """
+    Inserts a U-shaped pattern into the maze at the specified top-left position.
+    Then, it forces connectivity by ensuring a predetermined connecting cell is open.
+    
+    Parameters:
+      maze: 2D list representing the maze.
+      top_left_row, top_left_col: the top-left coordinates where the pattern will be inserted.
+      pattern: a 2D list representing the desired U-shape pattern.
+    """
+    rows = len(pattern)
+    cols = len(pattern[0])
+    # Insert the pattern into the maze.
+    for i in range(rows):
+        for j in range(cols):
+            maze[top_left_row + i][top_left_col + j] = pattern[i][j]
+    
+    # Force connectivity:
+    # For example, force the bottom middle cell to be walkable.
+    bottom_middle_row = top_left_row + rows - 1
+    bottom_middle_col = top_left_col + cols // 2
+    maze[bottom_middle_row][bottom_middle_col] = 1
+
 def create_maze_map(rows, cols):
     """
     Creates a maze-like map using DFS where:
@@ -50,7 +73,6 @@ def create_maze_map(rows, cols):
 
     return maze
 
-
 def unlock_hidden_room(maze):
     # Suppose we stored the blocked cell as (blocked_r, blocked_c)
     # For simplicity, let's just search for any cell that is 0 but
@@ -66,9 +88,9 @@ def unlock_hidden_room(maze):
                     nr, nc = r+dr, c+dc
                     if 0 <= nr < rows and 0 <= nc < cols:
                         if maze[nr][nc] == 2:
-                            # This is the locked entrance
                             maze[r][c] = 1
                             return  # done, we unlocked it
+
 # --- Pygame Setup ---
 pygame.init()
 
@@ -81,23 +103,20 @@ GRID_COLS = 10
 PIXEL_ONE_X = SIZE_X / GRID_COLS
 PIXEL_ONE_Y = SIZE_Y / GRID_ROWS
 
-# Generate a 5x5 "maze" map
-# 1 = walkable, 0 = blocked
+# Generate the maze map.
 matrix = create_maze_map(GRID_ROWS, GRID_COLS)
-# Create border_tuples for each blocked cell
 
-def find_start():
-    for i in (1,len(matrix)):
-        for j in range(len(matrix[0])):
-            if(matrix[len(matrix)-i][j] == 1):
-                return len(matrix)-i,j
-            
-    return 0,0
+# Insert a U-shape pattern into the maze.
+# Choose a top-left position (make sure the area fits inside the maze).
+# For example, here we insert it at row 2, column 2.
+u_shape = [
+    [1, 0, 1],
+    [1, 1, 0],
+    [1, 0, 1]
+]
+insert_u_shape_with_connectivity(matrix, 2, 2, u_shape)
 
-player_start_y,player_start_x = find_start()
-print(player_start_x,player_start_y)
-player_start_x = player_start_x * PIXEL_ONE_X
-player_start_y = player_start_y * PIXEL_ONE_Y
+# Create border_tuples for each blocked cell.
 border_tuples = []
 for row in range(GRID_ROWS):
     for col in range(GRID_COLS):
@@ -108,4 +127,16 @@ for row in range(GRID_ROWS):
             y_end   = y_start + PIXEL_ONE_Y
             border_tuples.append(((x_start, x_end), (y_start, y_end)))
 
-# Now you can use border_tuples to draw crates or obstacles in your game loop.
+def find_start():
+    for i in range(1, len(matrix)):
+        for j in range(len(matrix[0])):
+            if matrix[len(matrix)-i][j] == 1:
+                return len(matrix)-i, j
+    return 0, 0
+
+player_start_y, player_start_x = find_start()
+print(player_start_x, player_start_y)
+player_start_x = player_start_x * PIXEL_ONE_X
+player_start_y = player_start_y * PIXEL_ONE_Y
+
+# Now border_tuples can be used in your game loop to draw crates or obstacles.

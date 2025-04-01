@@ -1,17 +1,18 @@
 import math
+import random
 import time
-from collections import deque
 import pygame
+from collections import deque
 
 from constants.matrix_sizes import PIXEL_ONE_X, PIXEL_ONE_Y, matrix, GRID_ROWS, GRID_COLS
 
 class Enemy:
     def __init__(self, position, patrolling_area, move_speed=3, update_interval=1):
         """
-        :param position: (x, y) pixel coordinates for the enemy's start
-        :param move_speed: pixels the enemy moves each update
-        :param update_interval: seconds between path recalculations
+        Initialize the enemy with a starting pixel position, a designated patrolling area,
+        a movement speed, and an update interval.
         """
+        # Load enemy images for animations in each direction.
         self.images = {
             'down': [
                 pygame.transform.scale(
@@ -47,67 +48,89 @@ class Enemy:
             ]
         }
         self.direction = 'down'
-        self.position = position
-        self.move_speed = move_speed
+        self.position = position  # Should be at a cell center
+        self.move_speed = random.randint(0,1)
         self.update_interval = update_interval
 
-        self.last_update_time = time.time()
-        self.path = []  # Used when chasing the player
+        # Animation variables.
         self.frames_per_step = 10
         self.frame_timer = 0
         self.current_frame = 0
         self.current_image = self.images[self.direction][self.current_frame]
-        self.patrolling_area = patrolling_area
 
-        # Build a complete patrol route covering all walkable cells in the patrol area.
-        self.build_complete_patrol_route()
+        self.patrolling_area = patrolling_area
+        # Initialize the path cache (still used in other parts) before building the patrol route.
+        self._path_cache = {}
+        # Build the patrol route covering all walkable cells in the patrol area.
+        self.complete_patrol_route = self.build_exhaustive_patrol_route()
         self.patrol_index = 0
 
-        # Placeholder for stimulus; when True the enemy chases the player.
-        self.stimulus = False
-
-    def build_complete_patrol_route(self):
+    def build_exhaustive_patrol_route(self):
         """
-        Build an ordered list of grid cells (only walkable ones) from the patrolling_area.
-        We use a greedy algorithm (choosing the nearest unvisited cell by Manhattan distance)
-        starting from the enemy's current grid cell. Then we smooth the route to remove
-        unnecessary angular changes and finally close the loop by appending the starting cell.
+        Generate a patrol route that visits every walkable cell (candidate) in the patrol area.
+        First, perform DFS starting from the enemy's position. Then, if any candidate cells remain
+        unvisited (i.e. the area is not fully connected from the start), use BFS to jump to an
+        unvisited cell and continue the DFS from there.
+        Finally, ensure the route ends at the starting cell.
         """
+        # Define grid boundaries from the patrolling area.
         x_min, y_min, x_max, y_max = self.patrolling_area
         col_min = int(x_min // PIXEL_ONE_X)
         row_min = int(y_min // PIXEL_ONE_Y)
         col_max = int(x_max // PIXEL_ONE_X)
         row_max = int(y_max // PIXEL_ONE_Y)
-
-        # Create candidate list from walkable cells (matrix value 1)
-        candidates = []
+        
+        # Build the set of candidate (walkable) cells.
+        candidates = set()
         for row in range(row_min, row_max + 1):
             for col in range(col_min, col_max + 1):
                 if 0 <= col < GRID_COLS and 0 <= row < GRID_ROWS:
                     if matrix[row][col] == 1:
-                        candidates.append((col, row))
-
+                        candidates.add((col, row))
+        
         start = self.pixel_to_grid(self.position)
-        route = [start]
-        if start in candidates:
-            candidates.remove(start)
-        current = start
-
-        while candidates:
-            next_cell = min(candidates, key=lambda cell: abs(cell[0] - current[0]) + abs(cell[1] - current[1]))
-            route.append(next_cell)
-            candidates.remove(next_cell)
-            current = next_cell
-
-        # Close the loop by returning to start
-        route.append(start)
-        # Smooth the route to remove unnecessary turns
-        self.complete_patrol_route = self.smooth_route(route)
-
+        visited = set()
+        route = []
+        
+        def dfs(cell):
+            """Standard DFS that visits every candidate reachable from cell."""
+            visited.add(cell)
+            route.append(cell)
+            for neighbor in self.get_neighbors(cell):  # fixed order: right, down, left, up
+                if neighbor in candidates and neighbor not in visited:
+                    dfs(neighbor)
+                    # Append the current cell as a backtracking step.
+                    route.append(cell)
+        
+        # First, do DFS from the starting cell.
+        dfs(start)
+        
+        # If some candidates remain unvisited (disconnected regions),
+        # find a route from the current end of route to one unvisited cell and DFS from there.
+        while candidates - visited:
+            # Pick one unvisited candidate.
+            next_cell = (candidates - visited).pop()
+            # Compute a connecting path using BFS from the last cell in route to next_cell.
+            current_end = route[-1]
+            jump = self.find_path(next_cell, start_cell=current_end)
+            if jump and len(jump) > 1:
+                # Append the jump (skip the first cell because it is current_end).
+                route.extend(jump[1:])
+            else:
+                # If no jump found, directly add the cell.
+                route.append(next_cell)
+            # Continue DFS from this new cell.
+            dfs(next_cell)
+        
+        # Finally, append the start cell to close the loop if not already there.
+        if route[-1] != start:
+            route.append(start)
+        return route
+    
     def smooth_route(self, route):
         """
-        A simple route smoothing: if three consecutive waypoints
-        lie on a straight line, remove the middle one.
+        Optimize the patrol route by removing unnecessary waypoints.
+        If three consecutive waypoints lie on a straight line, remove the middle one.
         """
         if not route or len(route) < 3:
             return route
@@ -116,26 +139,151 @@ class Enemy:
             prev = smoothed[-1]
             curr = route[i]
             nxt = route[i + 1]
-            # Calculate differences in x and y for both segments
-            dx1 = curr[0] - prev[0]
-            dy1 = curr[1] - prev[1]
-            dx2 = nxt[0] - curr[0]
-            dy2 = nxt[1] - curr[1]
-            # If the direction doesn't change, skip the current waypoint.
+            dx1, dy1 = curr[0] - prev[0], curr[1] - prev[1]
+            dx2, dy2 = nxt[0] - curr[0], nxt[1] - curr[1]
             if dx1 == dx2 and dy1 == dy2:
                 continue
             smoothed.append(curr)
         smoothed.append(route[-1])
         return smoothed
 
-    def find_path_to_target(self, target_cell):
+    def move_patrol_area(self):
         """
-        Perform BFS to find a path from the enemy's current grid cell to target_cell.
-        Returns a list of grid cells (path) or an empty list if no path is found.
+        Move the enemy toward the center of the next cell in its patrol route.
+        If the direct step toward the next cell is blocked, compute a mini path via BFS and follow it.
+        Once the mini path is finished, resume the normal patrol route.
         """
-        start = self.pixel_to_grid(self.position)
-        goal = target_cell
-        if not self.is_walkable(start) or not self.is_walkable(goal):
+        # If currently following a mini path, follow it first.
+        if hasattr(self, '_mini_path') and self._mini_path is not None and len(self._mini_path) > 0:
+            target = self._mini_path[0]
+            target_pixel = self.grid_to_pixel(target)
+            dx = target_pixel[0] - self.position[0]
+            dy = target_pixel[1] - self.position[1]
+            dist = math.hypot(dx, dy)
+            if dist < self.move_speed:
+                self.position = target_pixel
+                self._mini_path.pop(0)
+            else:
+                dx_norm = dx / dist
+                dy_norm = dy / dist
+                new_x = self.position[0] + dx_norm * self.move_speed
+                new_y = self.position[1] + dy_norm * self.move_speed
+                self.position = (new_x, new_y)
+            # If mini path is finished, clear it and update patrol index.
+            if not self._mini_path:
+                self._mini_path = None
+                self.patrol_index = (self.patrol_index + 1) % len(self.complete_patrol_route)
+        else:
+            # No mini path: attempt direct movement toward next patrol cell.
+            target_cell = self.complete_patrol_route[self.patrol_index]
+            target_pixel = self.grid_to_pixel(target_cell)
+            dx = target_pixel[0] - self.position[0]
+            dy = target_pixel[1] - self.position[1]
+            dist = math.hypot(dx, dy)
+            if dist < self.move_speed:
+                self.position = target_pixel
+                self.patrol_index = (self.patrol_index + 1) % len(self.complete_patrol_route)
+            else:
+                dx_norm = dx / dist
+                dy_norm = dy / dist
+                new_x = self.position[0] + dx_norm * self.move_speed
+                new_y = self.position[1] + dy_norm * self.move_speed
+                # Check if the step to (new_x, new_y) collides.
+                if self.check_collision((new_x, new_y)):
+                    # Compute BFS mini path from the current grid cell to the target patrol cell.
+                    current_grid = self.pixel_to_grid(self.position)
+                    mini_path = self.find_path(target_cell, start_cell=current_grid)
+                    if mini_path and len(mini_path) > 1:
+                        # Skip the first cell (current position) and store the mini path.
+                        self._mini_path = mini_path[1:]
+                        # Immediately follow the first step of the mini path.
+                        target = self._mini_path[0]
+                        target_pixel = self.grid_to_pixel(target)
+                        dx = target_pixel[0] - self.position[0]
+                        dy = target_pixel[1] - self.position[1]
+                        dist = math.hypot(dx, dy)
+                        if dist < self.move_speed:
+                            self.position = target_pixel
+                            self._mini_path.pop(0)
+                        else:
+                            dx_norm = dx / dist
+                            dy_norm = dy / dist
+                            new_x = self.position[0] + dx_norm * self.move_speed
+                            new_y = self.position[1] + dy_norm * self.move_speed
+                            self.position = (new_x, new_y)
+                    else:
+                        # Fallback: if no mini path is found, move directly.
+                        self.position = (new_x, new_y)
+                else:
+                    # Direct step is clear.
+                    self.position = (new_x, new_y)
+        # Update facing direction based on movement.
+        if abs(dx) > abs(dy):
+            self.direction = 'right' if dx > 0 else 'left'
+        else:
+            self.direction = 'down' if dy > 0 else 'up'
+        # Update animation frame.
+        self.frame_timer += 1
+        if self.frame_timer >= self.frames_per_step:
+            self.frame_timer = 0
+            self.current_frame = (self.current_frame + 1) % 2
+        self.current_image = self.images[self.direction][self.current_frame]
+        """
+        Move the enemy toward the center of the next cell in its patrol route.
+        If the enemy is close enough to the target cell, snap exactly to that center and advance the waypoint.
+        """
+        if not hasattr(self, 'complete_patrol_route') or not self.complete_patrol_route:
+            return
+
+        if self.patrol_index >= len(self.complete_patrol_route):
+            self.patrol_index = 0
+
+        target_cell = self.complete_patrol_route[self.patrol_index]
+        target_pixel = self.grid_to_pixel(target_cell)
+        dx = target_pixel[0] - self.position[0]
+        dy = target_pixel[1] - self.position[1]
+        dist = math.hypot(dx, dy)
+
+        if dist < self.move_speed:
+            self.position = target_pixel
+            self.patrol_index = (self.patrol_index + 1) % len(self.complete_patrol_route)
+        else:
+            dx_norm = dx / dist
+            dy_norm = dy / dist
+            new_x = self.position[0] + dx_norm * self.move_speed
+            new_y = self.position[1] + dy_norm * self.move_speed
+            self.position = (new_x, new_y)
+
+        # Update facing direction.
+        if abs(dx) > abs(dy):
+            self.direction = 'right' if dx > 0 else 'left'
+        else:
+            self.direction = 'down' if dy > 0 else 'up'
+
+        # Update animation frame.
+        self.frame_timer += 1
+        if self.frame_timer >= self.frames_per_step:
+            self.frame_timer = 0
+            self.current_frame = (self.current_frame + 1) % 2
+        self.current_image = self.images[self.direction][self.current_frame]
+
+    def update(self, player_pos):
+        """
+        Update the enemy's behavior. Currently, it only patrols its route.
+        The player_pos parameter is accepted for future BFS/chasing logic.
+        """
+        self.move_patrol_area()
+
+    # --- BFS and auxiliary functions (kept for future use) ---
+
+    def find_path(self, target_cell, start_cell=None):
+        """
+        Use BFS to find a path from start_cell to target_cell.
+        If start_cell is None, uses the enemy's current grid cell.
+        Returns a list of grid cells (including both endpoints).
+        """
+        start = start_cell if start_cell is not None else self.pixel_to_grid(self.position)
+        if not self.is_walkable(start) or not self.is_walkable(target_cell):
             return []
         queue = deque([start])
         came_from = {start: None}
@@ -143,7 +291,7 @@ class Enemy:
         found = False
         while queue and not found:
             current = queue.popleft()
-            if current == goal:
+            if current == target_cell:
                 found = True
                 break
             for neighbor in self.get_neighbors(current):
@@ -154,149 +302,26 @@ class Enemy:
         if not found:
             return []
         path = []
-        node = goal
+        node = target_cell
         while node != start:
             path.append(node)
             node = came_from[node]
+        path.append(start)
         path.reverse()
         return path
 
-    def move_patrol_area(self):
-        """
-        Move the enemy along the complete patrol route.
-        A BFS path is computed from the enemy’s current grid cell to the next patrol waypoint,
-        and the enemy moves along the first step of that path.
-        When it gets close enough to the waypoint, it advances to the next one.
-        """
-        if not hasattr(self, 'complete_patrol_route') or not self.complete_patrol_route:
-            return
-        if self.patrol_index >= len(self.complete_patrol_route):
-            self.patrol_index = 0
-        target_cell = self.complete_patrol_route[self.patrol_index]
-        path = self.find_path_to_target(target_cell)
-        if not path:
-            self.patrol_index += 1
-            return
-        next_cell = path[0]
-        target_pixel = self.grid_to_pixel(next_cell)
-        dx = target_pixel[0] - self.position[0]
-        dy = target_pixel[1] - self.position[1]
-        dist = math.hypot(dx, dy)
-        if dist > 0:
-            dx /= dist
-            dy /= dist
-        if abs(dx) > abs(dy):
-            self.direction = 'right' if dx > 0 else 'left'
-        else:
-            self.direction = 'down' if dy > 0 else 'up'
-        new_x = self.position[0] + dx * self.move_speed
-        new_y = self.position[1] + dy * self.move_speed
-        if not self.check_collision((new_x, new_y)):
-            self.position = (new_x, new_y)
-            self.frame_timer += 1
-            if self.frame_timer >= self.frames_per_step:
-                self.frame_timer = 0
-                self.current_frame = (self.current_frame + 1) % 2
-            self.current_image = self.images[self.direction][self.current_frame]
-        new_dist = math.hypot(target_pixel[0] - self.position[0], target_pixel[1] - self.position[1])
-        if new_dist < self.move_speed:
-            self.patrol_index += 1
-
-    def move(self, player_pos):
-        """
-        Move the enemy toward the player using BFS.
-        """
-        current_time = time.time()
-        if current_time - self.last_update_time >= self.update_interval:
-            self.find_path(player_pos)
-            self.last_update_time = current_time
-        if not self.path:
-            return
-        next_cell = self.path[0]
-        target_pixel = self.grid_to_pixel(next_cell)
-        dx = target_pixel[0] - self.position[0]
-        dy = target_pixel[1] - self.position[1]
-        dist = math.sqrt(dx * dx + dy * dy)
-        if dist > 0:
-            dx /= dist
-            dy /= dist
-        if abs(dx) > abs(dy):
-            self.direction = 'right' if dx > 0 else 'left'
-        else:
-            self.direction = 'down' if dy > 0 else 'up'
-        new_x = self.position[0] + dx * self.move_speed
-        new_y = self.position[1] + dy * self.move_speed
-        if not self.check_collision((new_x, new_y)):
-            self.position = (new_x, new_y)
-            self.frame_timer += 1
-            if self.frame_timer >= self.frames_per_step:
-                self.frame_timer = 0
-                self.current_frame = (self.current_frame + 1) % 2
-            self.current_image = self.images[self.direction][self.current_frame]
-            new_dist = math.sqrt((target_pixel[0] - new_x) ** 2 + (target_pixel[1] - new_y) ** 2)
-            if new_dist < self.move_speed:
-                self.path.pop(0)
-        else:
-            self.path.pop(0)
-            self.find_path(player_pos)
-
-    def update(self, player_pos):
-        """
-        Update the enemy's behavior.
-        If stimulus is present, chase the player; otherwise, follow the patrol route.
-        """
-        if self.stimulus:
-            self.move(player_pos)
-        else:
-            self.move_patrol_area()
-
-    def find_path(self, player_pos):
-        """
-        BFS pathfinding from the enemy's current grid cell to the player's grid cell.
-        """
-        start = self.pixel_to_grid(self.position)
-        goal = self.pixel_to_grid(player_pos)
-        if not self.is_walkable(start) or not self.is_walkable(goal):
-            self.path = []
-            return
-        queue = deque([start])
-        came_from = {start: None}
-        visited = {start}
-        found = False
-        while queue and not found:
-            current = queue.popleft()
-            if current == goal:
-                found = True
-                break
-            for neighbor in self.get_neighbors(current):
-                if neighbor not in visited and self.is_walkable(neighbor):
-                    visited.add(neighbor)
-                    came_from[neighbor] = current
-                    queue.append(neighbor)
-        if found:
-            path = []
-            node = goal
-            while node != start:
-                path.append(node)
-                node = came_from[node]
-            path.reverse()
-            self.path = path
-        else:
-            self.path = []
-
     def get_neighbors(self, cell):
         """
-        Return valid up/down/left/right neighbors for BFS.
+        Return valid (right, down, left, up) neighbors for a given grid cell.
         """
         col, row = cell
         neighbors = [
-            (col, row - 1),
-            (col, row + 1),
-            (col - 1, row),
-            (col + 1, row)
+            (col + 1, row),  # right
+            (col, row + 1),  # down
+            (col - 1, row),  # left
+            (col, row - 1)   # up
         ]
-        valid = [(c, r) for (c, r) in neighbors if 0 <= c < GRID_COLS and 0 <= r < GRID_ROWS]
-        return valid
+        return [(c, r) for (c, r) in neighbors if 0 <= c < GRID_COLS and 0 <= r < GRID_ROWS]
 
     def check_collision(self, pixel_pos):
         """
@@ -310,7 +335,7 @@ class Enemy:
 
     def is_walkable(self, cell):
         """
-        Check if a cell is walkable.
+        Check if a grid cell is walkable.
         """
         col, row = cell
         if not self.in_bounds(cell):
@@ -319,7 +344,7 @@ class Enemy:
 
     def pixel_to_grid(self, pixel_pos):
         """
-        Convert pixel coordinates to grid cell (col, row).
+        Convert pixel coordinates to a grid cell (col, row).
         """
         x, y = pixel_pos
         col = int(x // PIXEL_ONE_X)
@@ -337,10 +362,10 @@ class Enemy:
 
     def in_bounds(self, cell):
         """
-        Check if a cell is within the grid bounds.
+        Check if a grid cell is within bounds.
         """
-        c, r = cell
-        return (0 <= c < GRID_COLS and 0 <= r < GRID_ROWS)
+        col, row = cell
+        return 0 <= col < GRID_COLS and 0 <= row < GRID_ROWS
 
     def get_position(self):
         """
@@ -350,7 +375,7 @@ class Enemy:
 
     def draw(self, screen):
         """
-        Draw the enemy sprite on the screen.
+        Draw the enemy sprite on the screen with a fixed offset.
         """
         x_offset = 20
         y_offset = 20

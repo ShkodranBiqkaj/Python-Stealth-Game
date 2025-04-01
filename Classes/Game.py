@@ -11,14 +11,12 @@ class Game:
         pygame.display.set_caption("Stealth Game - BFS Enemy")
         self.clock = pygame.time.Clock()
         self.background = pygame.image.load("../Assets/background.jpg").convert()
-        
         self.player = Player(player_start_x, player_start_y)
-        position = (50, 50)
         # Define the patrol area in pixel coordinates.
         # For example, to patrol the left half of the screen:
         # (x_min, y_min, x_max, y_max) = (0, 0, (GRID_COLS/2)*PIXEL_ONE_X, GRID_ROWS*PIXEL_ONE_Y)
-        patrolling_area = (0, 0, (GRID_COLS / 2) * PIXEL_ONE_X, GRID_ROWS * PIXEL_ONE_Y)
-        self.enemy = Enemy(position, patrolling_area, move_speed=3, update_interval=1)
+        self.level = 2
+        self.enemies = []
 
     def draw_map(self):
         crate_image = pygame.image.load("../Assets/walls.png").convert_alpha()
@@ -29,8 +27,17 @@ class Game:
             scaled_crate = pygame.transform.scale(crate_image, (int(width), int(height)))
             self.screen.blit(scaled_crate, rect)
 
+    def level_changes(self):
+        unit = PIXEL_ONE_X*GRID_COLS/self.level
+        for i in range(self.level):
+            # x min, y min, x max, y max
+            patrolling_area = (i*unit, 0, (i+1)*(unit), GRID_ROWS * PIXEL_ONE_Y)
+            self.enemies.append(Enemy((i*unit, 30), patrolling_area, move_speed=3, update_interval=1))
+            print(patrolling_area)
+
     def game_loop(self):
         running = True
+        self.level_changes()
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -43,11 +50,14 @@ class Game:
             player_pos = self.player.get_position()
 
             # Update the enemy behavior (patrol or chase based on stimulus)
-            self.enemy.update(player_pos)
-            enemy_pos = self.enemy.get_position()
+            for e in range(len(self.enemies)):
+                self.enemies[e].update(player_pos)
+
 
             self.player.draw(self.screen)
-            self.enemy.draw(self.screen)
+            for e in range(len(self.enemies)):
+                self.enemies[e].draw(self.screen)
+
 
             pygame.display.flip()
             self.clock.tick(60)
