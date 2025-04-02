@@ -6,10 +6,10 @@ import pygame
 from constants.matrix_sizes import PIXEL_ONE_X, PIXEL_ONE_Y, matrix, GRID_ROWS, GRID_COLS
 
 class Enemy:
-    def __init__(self, position, patrol_route, move_speed=3, update_interval=1):
+    def __init__(self, position, patrol_route, move_speed=1.3, update_interval=1):
         """
         Initialize the enemy with a starting pixel position, a precomputed patrol route (list of grid cells),
-        a movement speed, and an update interval.
+        a patrol movement speed (slow), and an update interval.
         """
         # Load normal enemy images.
         self.images = {
@@ -46,7 +46,7 @@ class Enemy:
                 )
             ]
         }
-        # Load alert images (same names but with "_alert" inserted).
+        # Load alert images (with "_alert" in their names).
         self.alert_images = {
             'down': [
                 pygame.transform.scale(
@@ -84,7 +84,10 @@ class Enemy:
         
         self.direction = 'down'
         self.position = position  # Pixel coordinates
-        self.move_speed = move_speed
+        # Base (patrol) speed is slow.
+        self.patrol_speed = 1.5 
+        # Alert (chase) speed is faster.
+        self.alert_speed = 3
         self.update_interval = update_interval
         self.last_update_time = time.time()
 
@@ -94,7 +97,7 @@ class Enemy:
         self.current_frame = 0
         self.current_image = self.images[self.direction][self.current_frame]
 
-        # Patrol route (precomputed externally) as a list of grid cells.
+        # Patrol route (precomputed externally): list of grid cells.
         self.complete_patrol_route = patrol_route  
         self.patrol_index = 0
 
@@ -107,41 +110,37 @@ class Enemy:
         self.patrol_index_backup = None
 
     def update(self, player_pos):
-        """
-        Update enemy behavior:
-          - If the player's grid cell is within 1 unit, switch to alert mode and chase.
-          - In alert mode, chase for 5 seconds or until the player is >= 2 units away.
-          - When switching back to patrol, if the enemy is in a non-walkable cell, use go_to_point()
-            to follow a valid path to the nearest walkable cell.
-        """
-        enemy_cell = self.pixel_to_grid(self.position)
+        # Check if the player is hidden.
         player_cell = self.pixel_to_grid(player_pos)
-        dx = abs(enemy_cell[0] - player_cell[0])
-        dy = abs(enemy_cell[1] - player_cell[1])
-        grid_dist = math.hypot(dx, dy)
+        # Note: matrix is indexed as matrix[row][col].
+        if matrix[player_cell[1]][player_cell[0]] == 3:
+            # Player is hidden; force enemy to remain in patrol mode.
+            self.state = "patrol"
+            self.move_patrol_area()
+            return
+
+        enemy_cell = self.pixel_to_grid(self.position)
+        manhattan_dist = abs(enemy_cell[0] - player_cell[0]) + abs(enemy_cell[1] - player_cell[1])
         
-        if grid_dist <= 1:
+        # Enter alert mode if within 2 blocks.
+        if manhattan_dist <= 2:
             if self.state != "alert":
                 self.state = "alert"
-                self.alert_start_time = time.time()
                 self.patrol_index_backup = self.patrol_index
             self.move_alert(player_pos)
-        elif grid_dist >= 2:
-            if self.state == "alert" and time.time() - self.alert_start_time >= 5:
-                self.state = "patrol"
-                if self.patrol_index_backup is not None:
-                    self.patrol_index = self.patrol_index_backup
-                # If in a non-walkable cell, go to the nearest valid cell.
-                if not self.is_walkable(self.pixel_to_grid(self.position)):
-                    target_cell = self.find_nearest_walkable()
-                    if target_cell:
-                        target_pixel = self.grid_to_pixel(target_cell)
-                        self.go_to_point(target_pixel)
-                        return
-            if self.state == "alert":
-                self.move_alert(player_pos)
-            else:
-                self.move_patrol_area()
+        # Exit alert mode if player is more than 5 blocks away.
+        elif self.state == "alert" and manhattan_dist > 5:
+            self.state = "patrol"
+            if self.patrol_index_backup is not None:
+                self.patrol_index = self.patrol_index_backup
+            if not self.is_walkable(self.pixel_to_grid(self.position)):
+                target_cell = self.find_nearest_walkable()
+                if target_cell:
+                    target_pixel = self.grid_to_pixel(target_cell)
+                    self.go_to_point(target_pixel)
+                    return
+            self.move_patrol_area()
+        # Otherwise, if already alert, continue alert behavior; else patrol.
         else:
             if self.state == "alert":
                 self.move_alert(player_pos)
@@ -150,8 +149,8 @@ class Enemy:
 
     def go_to_point(self, target_pixel):
         """
-        Compute a valid path (using BFS through only walkable grid cells) from the enemy's current grid cell
-        to the grid cell corresponding to target_pixel. Follow the path step-by-step until the enemy reaches it.
+        Compute a valid BFS path from the enemy's current grid cell to the cell corresponding to target_pixel,
+        then follow the next step along that path.
         """
         target_cell = self.pixel_to_grid(target_pixel)
         start_cell = self.pixel_to_grid(self.position)
@@ -160,24 +159,24 @@ class Enemy:
         path = self.find_path_between(start_cell, target_cell)
         if not path or len(path) < 2:
             return
-        next_cell = path[1]  # The next step.
+        next_cell = path[1]
         next_pixel = self.grid_to_pixel(next_cell)
         dx = next_pixel[0] - self.position[0]
         dy = next_pixel[1] - self.position[1]
         dist = math.hypot(dx, dy)
-        if dist < self.move_speed:
+        if dist < self.patrol_speed:
             self.position = next_pixel
         else:
             dx_norm = dx / dist
             dy_norm = dy / dist
-            new_x = self.position[0] + dx_norm * self.move_speed
-            new_y = self.position[1] + dy_norm * self.move_speed
+            new_x = self.position[0] + dx_norm * self.patrol_speed
+            new_y = self.position[1] + dy_norm * self.patrol_speed
             self.position = (new_x, new_y)
         self.update_animation(dx, dy)
 
     def find_path_between(self, start, goal):
         """
-        Use BFS to compute a path (a list of grid cells) from a given start cell to a goal cell.
+        Use BFS to compute a path (a list of grid cells) from start to goal.
         Only walkable cells (matrix value 1 or 2) are enqueued.
         Returns a list of grid cells (including start and goal) representing the path.
         """
@@ -231,8 +230,7 @@ class Enemy:
     def move_patrol_area(self):
         """
         Move the enemy along its precomputed patrol route (complete_patrol_route).
-        Instead of moving directly toward the target, compute a BFS path between the enemy's current grid cell
-        and the next patrol target, then follow the next step of that path.
+        Compute a BFS path from the enemy's current cell to the next patrol target and follow the next step.
         """
         if not self.complete_patrol_route:
             return
@@ -240,25 +238,23 @@ class Enemy:
             self.patrol_index = 0
         target_cell = self.complete_patrol_route[self.patrol_index]
         start_cell = self.pixel_to_grid(self.position)
-        # Compute a valid path from current cell to target_cell.
         path = self.find_path_between(start_cell, target_cell)
         if path and len(path) >= 2:
             next_cell = path[1]
             target_pixel = self.grid_to_pixel(next_cell)
         else:
-            # Fallback: use target cell's center.
             target_pixel = self.grid_to_pixel(target_cell)
         dx = target_pixel[0] - self.position[0]
         dy = target_pixel[1] - self.position[1]
         dist = math.hypot(dx, dy)
-        if dist < self.move_speed:
+        if dist < self.patrol_speed:
             self.position = target_pixel
             self.patrol_index = (self.patrol_index + 1) % len(self.complete_patrol_route)
         else:
             dx_norm = dx / dist
             dy_norm = dy / dist
-            new_x = self.position[0] + dx_norm * self.move_speed
-            new_y = self.position[1] + dy_norm * self.move_speed
+            new_x = self.position[0] + dx_norm * self.patrol_speed
+            new_y = self.position[1] + dy_norm * self.patrol_speed
             self.position = (new_x, new_y)
         self.update_animation(dx, dy)
 
@@ -266,15 +262,13 @@ class Enemy:
         """
         Chase the player using BFS.
         Recalculate the BFS path every update_interval seconds.
+        Use alert_speed (fast) for movement.
         """
-        current_time = time.time()
-        if current_time - self.last_update_time >= self.update_interval:
+        if time.time() - self.last_update_time >= self.update_interval:
             self.find_path(player_pos)
-            self.last_update_time = current_time
-        
+            self.last_update_time = time.time()
         if not self.path:
             return
-        
         next_cell = self.path[0]
         target_pixel = self.grid_to_pixel(next_cell)
         dx = target_pixel[0] - self.position[0]
@@ -283,10 +277,8 @@ class Enemy:
         if dist > 0:
             dx /= dist
             dy /= dist
-        
-        new_x = self.position[0] + dx * self.move_speed
-        new_y = self.position[1] + dy * self.move_speed
-        
+        new_x = self.position[0] + dx * self.alert_speed
+        new_y = self.position[1] + dy * self.alert_speed
         if not self.check_collision((new_x, new_y)):
             self.position = (new_x, new_y)
             self.frame_timer += 1
@@ -296,18 +288,17 @@ class Enemy:
             self.current_image = self.alert_images[self.direction][self.current_frame]
             new_dist = math.hypot(target_pixel[0] - self.position[0],
                                   target_pixel[1] - self.position[1])
-            if new_dist < self.move_speed:
+            if new_dist < self.alert_speed:
                 self.path.pop(0)
         else:
             self.path.pop(0)
             self.find_path(player_pos)
-        
         self.update_animation(dx, dy)
 
     def update_animation(self, dx, dy):
         """
-        Update the enemy's facing direction and animation frame.
-        If in alert mode, use alert images; otherwise, normal images.
+        Update facing direction and animation frame.
+        Use alert images if in alert mode; otherwise, use normal images.
         """
         if abs(dx) > abs(dy):
             self.direction = 'right' if dx > 0 else 'left'
@@ -325,13 +316,13 @@ class Enemy:
     def find_path(self, player_pos):
         """
         Use BFS to compute a path from the enemy's current grid cell to the player's grid cell.
+        Only walkable cells (matrix value 1 or 2) are considered.
         """
         start = self.pixel_to_grid(self.position)
         goal = self.pixel_to_grid(player_pos)
         if not self.is_walkable(start) or not self.is_walkable(goal):
             self.path = []
             return
-        
         queue = deque([start])
         came_from = {start: None}
         visited = {start}
@@ -349,7 +340,6 @@ class Enemy:
         if not found:
             self.path = []
             return
-        
         path = []
         node = goal
         while node != start:
@@ -372,7 +362,7 @@ class Enemy:
 
     def check_collision(self, pixel_pos):
         """
-        Convert the pixel position to a grid cell and check for collision (matrix value 0).
+        Convert pixel position to a grid cell and check for collision (matrix value 0).
         """
         grid_cell = self.pixel_to_grid(pixel_pos)
         if not self.in_bounds(grid_cell):

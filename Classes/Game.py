@@ -1,22 +1,15 @@
 import pygame
 import math
-from constants.matrix_sizes import SIZE_X, SIZE_Y, border_tuples, player_start_x, player_start_y, matrix, GRID_COLS, GRID_ROWS, PIXEL_ONE_X, PIXEL_ONE_Y
+from constants.matrix_sizes import SIZE_X, SIZE_Y, border_tuples, player_start_x, player_start_y, matrix, GRID_COLS, GRID_ROWS, PIXEL_ONE_X, PIXEL_ONE_Y, enemy_count, maze_difficulty
 from Player import Player
 from Enemy import Enemy
 
 # --- Helper Functions for Patrol Route Generation ---
-
 def get_neighbors(cell):
     col, row = cell
-    # Fixed neighbor order: right, down, left, up
     return [(col + 1, row), (col, row + 1), (col - 1, row), (col, row - 1)]
 
 def get_region(patrolling_area):
-    """
-    Given a patrolling_area as (x_min, y_min, x_max, y_max) in pixels,
-    return a set of walkable grid cells (col, row) based on the global matrix.
-    Walkable cells are those where matrix[row][col] == 1.
-    """
     x_min, y_min, x_max, y_max = patrolling_area
     col_min = int(x_min // PIXEL_ONE_X)
     row_min = int(y_min // PIXEL_ONE_Y)
@@ -31,29 +24,19 @@ def get_region(patrolling_area):
     return region
 
 def choose_starting_points(region, guard_count):
-    """
-    Choose guard_count starting cells from region.
-    One simple strategy is to pick one random cell for each guard.
-    """
     region_list = list(region)
     import random
     random.shuffle(region_list)
     return region_list[:guard_count]
 
 def partition_region_among_guards(region, starting_points):
-    """
-    Partition the region among guards using multi-source BFS.
-    Each cell is assigned to the nearest starting point.
-    Returns a list of sets (one per guard) representing the partition.
-    """
     guard_count = len(starting_points)
     partitions = [set() for _ in range(guard_count)]
-    assignments = {}  # cell -> guard index
+    assignments = {}
     frontier = []
     for i, cell in enumerate(starting_points):
         frontier.append((cell, i))
         assignments[cell] = i
-
     while frontier:
         current, guard_idx = frontier.pop(0)
         partitions[guard_idx].add(current)
@@ -64,10 +47,6 @@ def partition_region_among_guards(region, starting_points):
     return partitions
 
 def dfs_euler(start, region):
-    """
-    Perform DFS (Euler tour) starting from 'start' over the given region.
-    When backtracking, append the current cell so that the route is continuous.
-    """
     route = []
     visited = set()
     def dfs(cell):
@@ -76,17 +55,13 @@ def dfs_euler(start, region):
         for neighbor in get_neighbors(cell):
             if neighbor in region and neighbor not in visited:
                 dfs(neighbor)
-                route.append(cell)  # backtracking step
+                route.append(cell)
     dfs(start)
     if route[-1] != start:
         route.append(start)
     return route
 
 def optimize_patrol_route(route):
-    """
-    Remove redundant backtracking steps.
-    For instance, remove consecutive duplicates and simple A, B, A patterns.
-    """
     if not route:
         return route
     optimized = []
@@ -102,15 +77,11 @@ def optimize_patrol_route(route):
     return optimized
 
 def generate_guard_patrol_routes(region, guard_count, difficulty):
-    """
-    Partition the region among guard_count guards and generate a patrol route for each.
-    If difficulty is high, the routes will be optimized.
-    Returns a list of patrol routes (each a list of grid cells), one per guard.
-    """
     starting_points = choose_starting_points(region, guard_count)
+    actual_guard_count = len(starting_points)
     partitions = partition_region_among_guards(region, starting_points)
     patrol_routes = []
-    for i in range(guard_count):
+    for i in range(actual_guard_count):
         part = partitions[i]
         if starting_points[i] in part:
             route = dfs_euler(starting_points[i], part)
@@ -122,7 +93,6 @@ def generate_guard_patrol_routes(region, guard_count, difficulty):
     return patrol_routes
 
 # --- Game Class ---
-
 class Game:
     def __init__(self):
         pygame.init()
@@ -132,26 +102,35 @@ class Game:
         self.background = pygame.image.load("../Assets/background.jpg").convert()
         
         self.player = Player(player_start_x, player_start_y)
-        self.guard_count = 2  # Number of guards
-        self.difficulty = 3   # 1: easy, 2: medium, 3: hard
+        self.guard_count = enemy_count  # Use enemy_count from options
+        # Map maze difficulty to numeric for patrol optimization:
+        self.difficulty = 1 if maze_difficulty == "easy" else 3
+        # For chasing options, assume you record those elsewhere; here we just leave them.
         self.enemies = []
-        # Define overall patrol area (entire level)
         self.patrolling_area = (0, 0, SIZE_X, SIZE_Y)
+
+    def pixel_to_grid(self,pixel_pos):
+        """
+        Convert pixel coordinates to matrix coordinates (col, row).
+        """
+        x, y = pixel_pos
+        col = int(x // PIXEL_ONE_X)
+        row = int(y // PIXEL_ONE_Y)
+        return col, row
+
 
     def draw_map(self):
         crate_image = pygame.image.load("../Assets/walls.png").convert_alpha()
-        for (x_start, x_end), (y_start, y_end) in border_tuples:
-            width = x_end - x_start
-            height = y_end - y_start
+        hidden_image = pygame.image.load("../Assets/hidden_room.png").convert_alpha()
+        for (row, col, x_start, y_start, width, height) in border_tuples:
             rect = pygame.Rect(math.floor(x_start), math.floor(y_start), width, height)
-            scaled_crate = pygame.transform.scale(crate_image, (int(width), int(height)))
-            self.screen.blit(scaled_crate, rect)
+            # Directly use the stored row, col from border_tuples.
+            image = hidden_image if matrix[row][col] == 3 else crate_image
+            scaled_image = pygame.transform.scale(image, (int(width), int(height)))
+            self.screen.blit(scaled_image, rect)
+
 
     def level_changes(self):
-        """
-        Partition the overall patrol area among guards.
-        Generate patrol routes for each guard using dynamic partitioning.
-        """
         region = get_region(self.patrolling_area)
         patrol_routes = generate_guard_patrol_routes(region, self.guard_count, self.difficulty)
         for i, route in enumerate(patrol_routes):
@@ -163,28 +142,7 @@ class Game:
             print(f"Guard {i} patrol route:", route)
             self.enemies.append(Enemy((spawn_x, spawn_y), route, move_speed=3, update_interval=1))
 
-    def start_screen(self):
-        """
-        Display a start screen until the user presses any key or clicks the mouse.
-        """
-        waiting = True
-        font = pygame.font.SysFont(None, 48)
-        text_surface = font.render("Press any key to start", True, (255, 255, 255))
-        text_rect = text_surface.get_rect(center=(SIZE_X // 2, SIZE_Y // 2))
-        while waiting:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    exit()
-                elif event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
-                    waiting = False
-            self.screen.blit(self.background, (0, 0))
-            self.screen.blit(text_surface, text_rect)
-            pygame.display.flip()
-            self.clock.tick(60)
-
     def game_loop(self):
-        self.start_screen()  # Wait for user to start the game.
         running = True
         self.level_changes()
         while running:
@@ -207,7 +165,6 @@ class Game:
             
             pygame.display.flip()
             self.clock.tick(60)
-        
         pygame.quit()
 
 if __name__ == "__main__":

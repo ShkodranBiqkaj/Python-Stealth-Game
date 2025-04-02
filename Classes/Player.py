@@ -47,7 +47,7 @@ class Player:
         # Position and speed.
         self.pos_X = player_pos_x
         self.pos_Y = player_pos_y
-        self.speed = 4
+        self.speed = 2.5
 
         # Animation timing: switch foot every N frames.
         self.frames_per_step = 10
@@ -56,16 +56,18 @@ class Player:
         # Mark the player's initial position in the matrix.
         col, row = self.pixel_to_grid((self.pos_X, self.pos_Y))
         matrix[row][col] = 2  # 2 = player
+
         self.game_over = False
 
     def move(self):
-        x, y = self.pixel_to_grid((self.pos_X,self.pos_Y))
-        if matrix[x][y] == 4:
+        # Check if player's current grid cell indicates game over (using proper row,col indexing)
+        col, row = self.pixel_to_grid((self.pos_X, self.pos_Y))
+        if matrix[row][col] == 4:
             self.game_over = True
 
         keys = pygame.key.get_pressed()
 
-        # Store old position for collision checks.
+        # Store old position.
         old_x, old_y = self.pos_X, self.pos_Y
 
         # Compute intended movement along each axis.
@@ -84,33 +86,39 @@ class Player:
             dx += self.speed
             self.direction = 'right'
 
-        # If E is pressed, try to unlock hidden room.
+        # If E is pressed, try to unlock the hidden room.
         if keys[pygame.K_e]:
             unlock_hidden_room(matrix)
 
-        # Attempt diagonal movement: instead, check horizontal and vertical moves separately.
+        # If no key is pressed, do nothing.
+        if dx == 0 and dy == 0:
+            return
+
+        # Attempt movement along each axis separately.
         new_x = old_x + dx
         new_y = old_y + dy
 
-        # Check horizontal movement (move only in x, y remains the same).
+        # Check horizontal movement (only x changes).
         if dx != 0:
             if not self.check_collision(new_x, old_y):
-                old_x = new_x  # Accept horizontal move.
+                old_x = new_x
             else:
-                new_x = old_x  # Block horizontal move.
-        # Check vertical movement (move only in y, x remains the same).
+                new_x = old_x
+        # Check vertical movement (only y changes).
         if dy != 0:
             if not self.check_collision(old_x, new_y):
-                old_y = new_y  # Accept vertical move.
+                old_y = new_y
             else:
-                new_y = old_y  # Block vertical move.
+                new_y = old_y
 
-        # Final new position.
+        # Update the player's position.
         self.pos_X, self.pos_Y = old_x, old_y
 
-        # Update matrix: mark previous cell as walkable, new cell as occupied.
-        old_col, old_row = self.pixel_to_grid((self.pos_X, self.pos_Y))
-        matrix[old_row][old_col] = 2
+        # Update matrix: mark the new cell as occupied by the player.
+        new_col, new_row = self.pixel_to_grid((self.pos_X, self.pos_Y))
+        if matrix[new_row][new_col] != 3:
+            matrix[new_row][new_col] = 2
+
 
         # Update animation.
         self.frame_timer += 1
@@ -118,14 +126,13 @@ class Player:
             self.frame_timer = 0
             self.current_frame = (self.current_frame + 1) % 2
         self.current_image = self.images[self.direction][self.current_frame]
-            
 
     def check_collision(self, new_x, new_y):
         """
         Check if any of the four corners of the 30x30 sprite at (new_x, new_y)
-        collides with a blocked tile (0) or is out of bounds.
+        collides with a blocked tile (value 0) or is out of bounds.
+        Now treats cells with values 1, 2, or 3 as walkable.
         """
-        # The four corners of the sprite.
         corners = [
             (new_x, new_y),               # top-left
             (new_x + 29, new_y),          # top-right
@@ -136,13 +143,13 @@ class Player:
             col, row = self.pixel_to_grid((corner_x, corner_y))
             if not (0 <= row < len(matrix) and 0 <= col < len(matrix[0])):
                 return True  # Out of bounds.
-            if matrix[row][col] == 0:
-                return True
+            if matrix[row][col] not in (1, 2, 3):
+                return True  # Collides if not walkable.
         return False
 
     def pixel_to_grid(self, pixel_pos):
         """
-        Convert pixel coordinates to matrix (col, row).
+        Convert pixel coordinates to matrix coordinates (col, row).
         """
         x, y = pixel_pos
         col = int(x // PIXEL_ONE_X)
@@ -155,4 +162,3 @@ class Player:
     def get_position(self):
         """Return the player's current (x, y) in pixels."""
         return (self.pos_X, self.pos_Y)
-    
