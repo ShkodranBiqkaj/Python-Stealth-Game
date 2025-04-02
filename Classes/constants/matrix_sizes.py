@@ -1,28 +1,28 @@
 import pygame
 import random
 
-def insert_u_shape_with_connectivity(maze, top_left_row, top_left_col, pattern):
-    """
-    Inserts a U-shaped pattern into the maze at the specified top-left position.
-    Then, it forces connectivity by ensuring a predetermined connecting cell is open.
+# def insert_u_shape_with_connectivity(maze, top_left_row, top_left_col, pattern):
+#     """
+#     Inserts a U-shaped pattern into the maze at the specified top-left position.
+#     Then, it forces connectivity by ensuring a predetermined connecting cell is open.
     
-    Parameters:
-      maze: 2D list representing the maze.
-      top_left_row, top_left_col: the top-left coordinates where the pattern will be inserted.
-      pattern: a 2D list representing the desired U-shape pattern.
-    """
-    rows = len(pattern)
-    cols = len(pattern[0])
-    # Insert the pattern into the maze.
-    for i in range(rows):
-        for j in range(cols):
-            maze[top_left_row + i][top_left_col + j] = pattern[i][j]
+#     Parameters:
+#       maze: 2D list representing the maze.
+#       top_left_row, top_left_col: the top-left coordinates where the pattern will be inserted.
+#       pattern: a 2D list representing the desired U-shape pattern.
+#     """
+#     rows = len(pattern)
+#     cols = len(pattern[0])
+#     # Insert the pattern into the maze.
+#     for i in range(rows):
+#         for j in range(cols):
+#             maze[top_left_row + i][top_left_col + j] = pattern[i][j]
     
-    # Force connectivity:
-    # For example, force the bottom middle cell to be walkable.
-    bottom_middle_row = top_left_row + rows - 1
-    bottom_middle_col = top_left_col + cols // 2
-    maze[bottom_middle_row][bottom_middle_col] = 1
+#     # Force connectivity:
+#     # For example, force the bottom middle cell to be walkable.
+#     bottom_middle_row = top_left_row + rows - 1
+#     bottom_middle_col = top_left_col + cols // 2
+#     maze[bottom_middle_row][bottom_middle_col] = 1
 
 def create_maze_map(rows, cols):
     """
@@ -71,6 +71,13 @@ def create_maze_map(rows, cols):
         if not carved_next:
             stack.pop()
 
+    i = 0
+    while i < len(maze[0]):
+        maze[0][i] = 1
+        if(len(maze[0])//2 == i):
+            maze[0][1] = 4
+        i = i+1 
+
     return maze
 
 def unlock_hidden_room(maze):
@@ -114,7 +121,7 @@ u_shape = [
     [1, 1, 0],
     [1, 0, 1]
 ]
-insert_u_shape_with_connectivity(matrix, 2, 2, u_shape)
+# insert_u_shape_with_connectivity(matrix, 2, 2, u_shape)
 
 # Create border_tuples for each blocked cell.
 border_tuples = []
