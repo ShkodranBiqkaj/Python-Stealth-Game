@@ -143,7 +143,7 @@ class Player:
             col, row = self.pixel_to_grid((corner_x, corner_y))
             if not (0 <= row < len(matrix) and 0 <= col < len(matrix[0])):
                 return True  # Out of bounds.
-            if matrix[row][col] not in (1, 2, 3):
+            if matrix[row][col] ==0:
                 return True  # Collides if not walkable.
         return False
 
