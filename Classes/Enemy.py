@@ -85,7 +85,7 @@ class Enemy:
         self.direction = 'down'
         self.position = position  # Pixel coordinates
         # Base (patrol) speed is slow.
-        self.patrol_speed = 1.5 
+        self.patrol_speed = 10
         # Alert (chase) speed is faster.
         self.alert_speed = 3
         self.update_interval = update_interval
@@ -110,20 +110,16 @@ class Enemy:
         self.patrol_index_backup = None
 
     def update(self, player_pos):
-        # Check if the player is hidden.
-        player_cell = self.pixel_to_grid(player_pos)
-        # Note: matrix is indexed as matrix[row][col].
-        if matrix[player_cell[1]][player_cell[0]] == 3:
-            # Player is hidden; force enemy to remain in patrol mode.
-            self.state = "patrol"
-            self.move_patrol_area()
-            return
-
         enemy_cell = self.pixel_to_grid(self.position)
+        player_cell = self.pixel_to_grid(player_pos)
         manhattan_dist = abs(enemy_cell[0] - player_cell[0]) + abs(enemy_cell[1] - player_cell[1])
         
+        # If the player is hidden (cell value 3), ignore the player.
+        if matrix[player_cell[1]][player_cell[0]] == 3:
+            self.state = "patrol"
+            self.move_patrol_area()
         # Enter alert mode if within 2 blocks.
-        if manhattan_dist <= 2:
+        elif manhattan_dist <= 2:
             if self.state != "alert":
                 self.state = "alert"
                 self.patrol_index_backup = self.patrol_index
@@ -138,14 +134,20 @@ class Enemy:
                 if target_cell:
                     target_pixel = self.grid_to_pixel(target_cell)
                     self.go_to_point(target_pixel)
+                    # Mark current cell with this enemy's unique marker.
+                    col, row = self.pixel_to_grid(self.position)
+                    matrix[row][col] = self.route_marker
                     return
             self.move_patrol_area()
-        # Otherwise, if already alert, continue alert behavior; else patrol.
         else:
             if self.state == "alert":
                 self.move_alert(player_pos)
             else:
                 self.move_patrol_area()
+        
+        # Mark the enemy's current grid cell with its unique marker.
+        col, row = self.pixel_to_grid(self.position)
+        matrix[row][col] = self.route_marker
 
     def go_to_point(self, target_pixel):
         """
