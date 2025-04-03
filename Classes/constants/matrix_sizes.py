@@ -177,19 +177,19 @@ def distribute_hidden_rooms(maze, num_hidden_per_quadrant=4):
                 hidden_count += 1
     return maze
 
-def unlock_hidden_room(maze):
-    print("Unlocked")
-    rows = len(maze)
-    cols = len(maze[0])
-    for r in range(rows):
-        for c in range(cols):
-            if maze[r][c] == 0:
-                for (dr, dc) in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    nr, nc = r + dr, c + dc
-                    if 0 <= nr < rows and 0 <= nc < cols:
-                        if maze[nr][nc] == 2:
-                            maze[r][c] = 1
-                            return
+# def unlock_hidden_room(maze):
+#     print("Unlocked")
+#     rows = len(maze)
+#     cols = len(maze[0])
+#     for r in range(rows):
+#         for c in range(cols):
+#             if maze[r][c] == 0:
+#                 for (dr, dc) in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+#                     nr, nc = r + dr, c + dc
+#                     if 0 <= nr < rows and 0 <= nc < cols:
+#                         if maze[nr][nc] == 2:
+#                             maze[r][c] = 1
+#                             return
 
 # --- Pygame Setup and Maze Generation ---
 pygame.init()

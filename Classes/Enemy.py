@@ -85,7 +85,7 @@ class Enemy:
         self.direction = 'down'
         self.position = position  # Pixel coordinates
         self.patrol_speed = 1.5    # Patrol speed
-        self.alert_speed = 2.9       # Alert (chase) speed
+        self.alert_speed = 2.9     # Alert (chase) speed
         self.update_interval = update_interval
         self.last_update_time = time.time()
 
@@ -126,7 +126,7 @@ class Enemy:
                 self.state = "alert"
                 self.patrol_index_backup = self.patrol_index
             self.move_alert(player_pos)
-        # If in alert mode but player is far away, return to patrol.
+        # If in alert mode but the player is far away, return to patrol.
         elif self.state == "alert" and manhattan_dist > 5:
             self.state = "patrol"
             if self.patrol_index_backup is not None:
@@ -144,10 +144,56 @@ class Enemy:
             else:
                 self.move_patrol_area()
 
-        # Marking the matrix is now optional (used for overlay in Game class);
-        # if you use a separate overlay grid, you might remove these lines.
+        # Optionally mark the matrix cell for overlay.
         col, row = self.pixel_to_grid(self.position)
         matrix[row][col] = self.route_marker
+
+    def can_see_player(self, player_pos):
+        """
+        Returns True if there is a clear line-of-sight between the enemy and the player.
+        Uses Bresenham's Line Algorithm to iterate through the grid cells between the enemy and player.
+        If any cell along the line is a wall (matrix value 0), returns False.
+        """
+        enemy_cell = self.pixel_to_grid(self.position)
+        player_cell = self.pixel_to_grid(player_pos)
+        line = self.bresenham_line(enemy_cell[0], enemy_cell[1], player_cell[0], player_cell[1])
+        for cell in line:
+            col, row = cell
+            if matrix[row][col] == 0:
+                return False
+        return True
+
+    def bresenham_line(self, x0, y0, x1, y1):
+        """
+        Bresenham's Line Algorithm.
+        Returns a list of grid cells from (x0, y0) to (x1, y1).
+        """
+        cells = []
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        x, y = x0, y0
+        sx = -1 if x0 > x1 else 1
+        sy = -1 if y0 > y1 else 1
+        if dx > dy:
+            err = dx / 2.0
+            while x != x1:
+                cells.append((x, y))
+                err -= dy
+                if err < 0:
+                    y += sy
+                    err += dx
+                x += sx
+        else:
+            err = dy / 2.0
+            while y != y1:
+                cells.append((x, y))
+                err -= dx
+                if err < 0:
+                    x += sx
+                    err += dy
+                y += sy
+        cells.append((x1, y1))
+        return cells
 
     def go_to_point(self, target_pixel):
         target_cell = self.pixel_to_grid(target_pixel)
@@ -244,6 +290,13 @@ class Enemy:
         self.update_animation(dx, dy)
 
     def move_alert(self, player_pos):
+        # First, check if the enemy still has a clear view.
+        if not self.can_see_player(player_pos):
+            # If something is in between, stop alert mode and return to patrol.
+            self.state = "patrol"
+            self.move_patrol_area()
+            return
+
         if time.time() - self.last_update_time >= self.update_interval:
             self.find_path(player_pos)
             self.last_update_time = time.time()
