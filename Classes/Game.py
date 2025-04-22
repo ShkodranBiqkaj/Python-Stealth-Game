@@ -1,16 +1,29 @@
-import pygame
-import math
+import os
 import random
 from collections import deque
-from constants.matrix_sizes import SIZE_X, SIZE_Y, border_tuples, player_start_x, player_start_y, matrix, GRID_COLS, GRID_ROWS, PIXEL_ONE_X, PIXEL_ONE_Y, enemy_count, maze_difficulty
+import pygame
+import time
+
+from matrix_sizes import (
+    SIZE_X, SIZE_Y,
+    border_tuples,
+    player_start_x, player_start_y,
+    matrix,
+    GRID_COLS, GRID_ROWS,
+    PIXEL_ONE_X, PIXEL_ONE_Y,
+    enemy_count, maze_difficulty,
+    T_WALL, T_FLOOR, T_HIDDEN, T_KEY, T_DOOR_C, T_DOOR_O
+)
+
 from Player import Player
 from Enemy import Enemy
 
-# --- Helper Functions for Patrol Route Generation ---
-
+# ──────────────────────────────────────────────────────────────────
+# Helper functions (unchanged)
+# ──────────────────────────────────────────────────────────────────
 def get_neighbors(cell):
     col, row = cell
-    return [(col + 1, row), (col, row + 1), (col - 1, row), (col, row - 1)]
+    return [(col+1, row), (col, row+1), (col-1, row), (col, row-1)]
 
 def get_region(patrolling_area):
     x_min, y_min, x_max, y_max = patrolling_area
@@ -22,282 +35,386 @@ def get_region(patrolling_area):
     for row in range(row_min, row_max):
         for col in range(col_min, col_max):
             if 0 <= col < GRID_COLS and 0 <= row < GRID_ROWS:
-                # Include cells with 1 (open) or 2 (player)
                 if matrix[row][col] in (1, 2):
                     region.add((col, row))
     return region
 
 def choose_starting_points(region, guard_count):
-    """
-    Choose 'guard_count' starting points from the given region.
-    Pick one random point and then add additional points one by one, ensuring
-    they are spread out. Even if some overlap, that's acceptable.
-    """
     region_list = list(region)
-    import random
-    chosen = []
     if not region_list:
-        return chosen
-    # Pick one random starting point.
-    chosen.append(random.choice(region_list))
+        return []
+    chosen = [random.choice(region_list)]
     threshold = max(GRID_COLS, GRID_ROWS) // 4
     while len(chosen) < guard_count and region_list:
-        candidate = random.choice(region_list)
-        if all(abs(candidate[0] - p[0]) + abs(candidate[1] - p[1]) >= threshold for p in chosen):
-            chosen.append(candidate)
-        else:
-            if random.random() < 0.3:
-                chosen.append(candidate)
-        region_list.remove(candidate)
+        c = random.choice(region_list)
+        if all(abs(c[0]-p[0]) + abs(c[1]-p[1]) >= threshold for p in chosen):
+            chosen.append(c)
+        elif random.random() < .3:
+            chosen.append(c)
+        region_list.remove(c)
     return chosen
 
-def partition_region_among_guards(region, starting_points):
-    from collections import deque
-    guard_count = len(starting_points)
-    partitions = [set() for _ in range(guard_count)]
-    assignments = {}
-    frontier = deque()
-    for i, cell in enumerate(starting_points):
-        frontier.append((cell, i))
-        assignments[cell] = i
+def partition_region_among_guards(region, starts):
+    g = len(starts)
+    parts = [set() for _ in range(g)]
+    frontier, owner = deque(), {}
+    for i, s in enumerate(starts):
+        frontier.append((s, i))
+        owner[s] = i
     while frontier:
-        current, guard_idx = frontier.popleft()
-        partitions[guard_idx].add(current)
-        for neighbor in get_neighbors(current):
-            if neighbor in region and neighbor not in assignments:
-                assignments[neighbor] = guard_idx
-                frontier.append((neighbor, guard_idx))
-    for i in range(guard_count):
-        if not partitions[i]:
-            partitions[i] = set(region)
-    return partitions
+        cur, idx = frontier.popleft()
+        parts[idx].add(cur)
+        for nb in get_neighbors(cur):
+            if nb in region and nb not in owner:
+                owner[nb] = idx
+                frontier.append((nb, idx))
+    for i in range(g):
+        if not parts[i]:
+            parts[i] = set(region)
+    return parts
 
 def dfs_euler(start, region):
-    """
-    Generates a route through the region using DFS.
-    The route is allowed to end at a dead end (it is not forced to loop back).
-    """
-    route = []
-    visited = set()
-    def dfs(cell):
-        visited.add(cell)
-        route.append(cell)
-        for neighbor in get_neighbors(cell):
-            if neighbor in region and neighbor not in visited:
-                dfs(neighbor)
-                route.append(cell)
+    route, vis = [], set()
+    def dfs(v):
+        vis.add(v)
+        route.append(v)
+        for nb in get_neighbors(v):
+            if nb in region and nb not in vis:
+                dfs(nb)
+                route.append(v)
     dfs(start)
     return route
 
 def optimize_patrol_route(route):
-    """
-    Remove redundant moves from a route.
-    For example, A -> B -> C -> B -> D becomes A -> B -> D.
-    """
     if not route:
         return route
-    optimized = []
-    for cell in route:
-        if not optimized or optimized[-1] != cell:
-            optimized.append(cell)
+    out = []
+    for c in route:
+        if not out or out[-1] != c:
+            out.append(c)
     i = 0
-    while i < len(optimized) - 2:
-        if optimized[i] == optimized[i+2]:
-            del optimized[i+1]
+    while i < len(out) - 2:
+        if out[i] == out[i+2]:
+            del out[i+1]
         else:
             i += 1
-    return optimized
+    return out
 
-def bfs_path(start, goal, region):
-    """
-    Uses BFS to find a path from start to goal through cells in 'region'.
-    Returns a list of cells [start, ..., goal] if found, else [].
-    """
-    from collections import deque
-    queue = deque([start])
-    came_from = {start: None}
-    visited = {start}
-    while queue:
-        current = queue.popleft()
-        if current == goal:
+def bfs_path(s, t, region):
+    q, came = deque([s]), {s: None}
+    while q:
+        v = q.popleft()
+        if v == t:
             path = []
-            node = goal
-            while node is not None:
-                path.append(node)
-                node = came_from[node]
-            path.reverse()
-            return path
-        for nb in get_neighbors(current):
-            if nb in region and nb not in visited:
-                visited.add(nb)
-                came_from[nb] = current
-                queue.append(nb)
+            while v is not None:
+                path.append(v)
+                v = came[v]
+            return path[::-1]
+        for nb in get_neighbors(v):
+            if nb in region and nb not in came:
+                came[nb] = v
+                q.append(nb)
     return []
 
 def join_dead_end_routes(routes, region):
-    """
-    For any route ending in a dead end (with no new adjacent cells),
-    attempt to connect it to another route so the enemy doesn't oscillate.
-    """
-    for i, route in enumerate(routes):
-        if not route:
+    for i, rt in enumerate(routes):
+        if not rt:
             continue
-        last_cell = route[-1]
-        free_neighbors = [n for n in get_neighbors(last_cell) if n in region and n not in route]
-        if not free_neighbors:
-            for j, other_route in enumerate(routes):
-                if i == j or not other_route:
-                    continue
-                for cell in other_route:
-                    if cell in get_neighbors(last_cell):
-                        path = bfs_path(last_cell, cell, region)
-                        if path and len(path) >= 2:
-                            extension = path[1:]  # skip duplicate
-                            route.extend(extension)
-                            break
-                else:
-                    continue
-                break
+        last = rt[-1]
+        if any(nb in region and nb not in rt for nb in get_neighbors(last)):
+            continue
+        for j, other in enumerate(routes):
+            if i == j or not other:
+                continue
+            for cell in other:
+                if cell in get_neighbors(last):
+                    path = bfs_path(last, cell, region)
+                    if path and len(path) > 1:
+                        rt.extend(path[1:])
+                        break
+            else:
+                continue
+            break
     return routes
 
-def generate_guard_patrol_routes(region, guard_count, difficulty):
-    starting_points = choose_starting_points(region, guard_count)
-    partitions = partition_region_among_guards(region, starting_points)
-    patrol_routes = []
-    for i in range(guard_count):
-        part = partitions[i]
-        if starting_points[i] in part:
-            route = dfs_euler(starting_points[i], part)
-        else:
-            route = dfs_euler(next(iter(part)), part)
-        if difficulty >= 3:
-            route = optimize_patrol_route(route)
-        patrol_routes.append(route)
-    patrol_routes = join_dead_end_routes(patrol_routes, region)
-    return patrol_routes
-
-# --- Game Class ---
+def generate_guard_patrol_routes(region, n, diff):
+    starts = choose_starting_points(region, n)
+    parts  = partition_region_among_guards(region, starts)
+    routes = []
+    for i in range(n):
+        start = starts[i] if starts[i] in parts[i] else next(iter(parts[i]))
+        r = dfs_euler(start, parts[i])
+        if diff >= 3:
+            r = optimize_patrol_route(r)
+        routes.append(r)
+    return join_dead_end_routes(routes, region)
+# ──────────────────────────────────────────────────────────────────
 
 class Game:
     def __init__(self):
         pygame.init()
+        pygame.display.set_caption("Stealth Game – Dynamic Guard Patrols")
         self.screen = pygame.display.set_mode((SIZE_X, SIZE_Y))
-        pygame.display.set_caption("Stealth Game - Dynamic Guard Patrols")
-        self.clock = pygame.time.Clock()
-        self.background = pygame.image.load("../Assets/background.jpg").convert()
-        self.player = Player(player_start_x, player_start_y)
-        self.guard_count = enemy_count  # Use enemy_count from options
-        self.difficulty = 1 if maze_difficulty == "easy" else 3
-        self.enemies = []
+        self.clock  = pygame.time.Clock()
+
+        # fonts & assets
+        self.font_small = pygame.font.SysFont(None, 24)
+        self.font_big   = pygame.font.SysFont(None, 48)
+        asset = lambda f: os.path.join("../Assets", f)
+
+        # backgrounds
+        self.bg_main  = pygame.transform.scale(
+            pygame.image.load(asset("Opening_screen.jpg")).convert(),
+            (SIZE_X, SIZE_Y)
+        )
+        self.bg_level = pygame.image.load(asset("background.jpg")).convert()
+
+        # base tiles
+        self.crate_img  = pygame.image.load(asset("walls.png")).convert_alpha()
+        self.hidden_img = pygame.image.load(asset("hidden_room.png")).convert_alpha()
+
+        # key & door
+        self.key_img = pygame.transform.scale(
+            pygame.image.load(asset("key.png")).convert_alpha(),
+            (int(PIXEL_ONE_X)/2, int(PIXEL_ONE_Y)/2)
+        )
+        self.door_img = pygame.transform.scale(
+            pygame.image.load(asset("Door_closed.png")).convert_alpha(),
+            (int(PIXEL_ONE_X), int(PIXEL_ONE_Y))
+        )
+        self.door_open = pygame.transform.scale(
+            pygame.image.load(asset("Door_open.png")).convert_alpha(),
+            (int(PIXEL_ONE_X), int(PIXEL_ONE_Y))
+        )
+
+        # locate key & door in the matrix
+        self.key_pos = next(
+            ((r, c) for r in range(GRID_ROWS) for c in range(GRID_COLS)
+             if matrix[r][c] == T_KEY),
+            None
+        )
+        self.door_pos = next(
+            ((r, c) for r in range(GRID_ROWS) for c in range(GRID_COLS)
+             if matrix[r][c] == T_DOOR_C),
+            None
+        )
+
+        # player & guards
+        self.player      = Player(player_start_x, player_start_y)
+        self.difficulty  = 1 if maze_difficulty == "easy" else 3
+        self.guard_count = enemy_count
+        self.enemies     = []
+        self.overlay     = True
+        self.paused      = False
+        self.help_on     = False
         self.patrolling_area = (0, 0, SIZE_X, SIZE_Y)
-        # Default setting for showing enemy patrol pattern overlay.
-        self.show_route_pattern = True
 
-    def options_screen(self):
-        """
-        Displays a front-screen options menu.
-        Press 'P' to toggle whether the enemy patrol pattern (colored overlay)
-        is displayed beneath the enemies.
-        Press ENTER to start the game.
-        """
-        font = pygame.font.SysFont(None, 36)
-        show_overlay = True
+    # ── MAIN MENU ─────────────────────────────────────────
+    def show_main_menu(self):
+        choice, labels = 0, ("NEW GAME", "QUIT")
         while True:
-            self.screen.fill((0, 0, 0))
-            option_texts = [
-                f"Show Enemy Patrol Pattern Overlay: {'ON' if show_overlay else 'OFF'} (Press P to toggle)",
-                "Press ENTER to start the game."
-            ]
-            for i, text in enumerate(option_texts):
-                text_surface = font.render(text, True, (255, 255, 255))
-                self.screen.blit(text_surface, (50, 50 + i * 40))
+            self.screen.blit(self.bg_main, (0, 0))
+            for i, lbl in enumerate(labels):
+                col = (255,255,0) if i==choice else (255,255,255)
+                txt = self.font_big.render(lbl, True, col)
+                self.screen.blit(txt, txt.get_rect(
+                    center=(SIZE_X//2, SIZE_Y//2 + i*60)))
             pygame.display.flip()
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    exit()
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_p:
-                        show_overlay = not show_overlay
-                    elif event.key == pygame.K_RETURN:
-                        self.show_route_pattern = show_overlay
-                        return
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    pygame.quit(); exit()
+                if e.type == pygame.KEYDOWN:
+                    if e.key in (pygame.K_UP, pygame.K_w):
+                        choice = (choice-1) % 2
+                    if e.key in (pygame.K_DOWN, pygame.K_s):
+                        choice = (choice+1) % 2
+                    if e.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        if choice == 0:
+                            return
+                        pygame.quit(); exit()
 
-    def pixel_to_grid(self, pixel_pos):
-        x, y = pixel_pos
-        col = int(x // PIXEL_ONE_X)
-        row = int(y // PIXEL_ONE_Y)
-        return col, row
+    # ── PAUSE OVERLAY ────────────────────────────────────
+    def draw_paused(self):
+        veil = pygame.Surface((SIZE_X, SIZE_Y), pygame.SRCALPHA)
+        veil.fill((0,0,0,180))
+        self.screen.blit(veil, (0,0))
+        txt = self.font_big.render("PAUSED", True, (255,255,255))
+        self.screen.blit(txt, txt.get_rect(center=(SIZE_X//2, SIZE_Y//2)))
 
+    # ── HELP OVERLAY ─────────────────────────────────────
+    def draw_help(self):
+        lines = [
+            "Controls:",
+            "  P … pause / resume",
+            "  K … toggle patrol overlay",
+            "  H … help",
+            "  WASD … move",
+            "  Esc … quit"
+        ]
+        pad = 8
+        w = max(self.font_small.size(l)[0] for l in lines) + pad*2
+        h = (self.font_small.get_height()+pad)*len(lines) + pad
+        surf = pygame.Surface((w,h), pygame.SRCALPHA)
+        surf.fill((0,0,0,180))
+        for i,l in enumerate(lines):
+            txt = self.font_small.render(l, True, (255,255,255))
+            surf.blit(txt, (pad, pad + i*(self.font_small.get_height()+pad)))
+        self.screen.blit(surf, ((SIZE_X-w)//2, (SIZE_Y-h)//2))
+
+    # ── DRAW MAP ─────────────────────────────────────────
     def draw_map(self):
-        crate_image = pygame.image.load("../Assets/walls.png").convert_alpha()
-        hidden_image = pygame.image.load("../Assets/hidden_room.png").convert_alpha()
-        for (row, col, x_start, y_start, width, height) in border_tuples:
-            rect = pygame.Rect(math.floor(x_start), math.floor(y_start), width, height)
-            image = hidden_image if matrix[row][col] == 3 else crate_image
-            scaled_image = pygame.transform.scale(image, (int(width), int(height)))
-            self.screen.blit(scaled_image, rect)
-        # Draw the patrol-route overlay only if enabled.
-        if self.show_route_pattern:
-            route_color_dict = {}
-            for enemy in self.enemies:
-                route_color_dict[enemy.route_marker] = enemy.route_color
-            for r in range(GRID_ROWS):
-                for c in range(GRID_COLS):
-                    if matrix[r][c] >= 5:
-                        color = route_color_dict.get(matrix[r][c], (0, 0, 0, 128))
-                        x_start = c * PIXEL_ONE_X
-                        y_start = r * PIXEL_ONE_Y
-                        overlay = pygame.Surface((int(PIXEL_ONE_X), int(PIXEL_ONE_Y)), pygame.SRCALPHA)
-                        overlay.fill(color)
-                        self.screen.blit(overlay, (x_start, y_start))
+        # walls & hidden
+        for (r, c, x, y, w, h) in border_tuples:
+            val = matrix[r][c]
+            if val == T_WALL:
+                img = self.crate_img
+            elif val == T_HIDDEN:
+                img = self.hidden_img
+            else:
+                img = None
+            if img:
+                self.screen.blit(pygame.transform.scale(img, (int(w),int(h))),
+                                 (int(x),int(y)))
 
+        # key & door
+        for r in range(GRID_ROWS):
+            for c in range(GRID_COLS):
+                val = matrix[r][c]
+                if val == T_KEY:
+                    img = self.key_img
+                elif val == T_DOOR_C:
+                    img = self.door_img
+                elif val == T_DOOR_O:
+                    img = self.door_open
+                else:
+                    continue
+                px, py = c*PIXEL_ONE_X, r*PIXEL_ONE_Y
+                self.screen.blit(img, (int(px), int(py)))
+
+        # patrol overlay
+        if self.overlay:
+            col_by_marker = {e.route_marker: e.route_color for e in self.enemies}
+            for rr in range(GRID_ROWS):
+                for cc in range(GRID_COLS):
+                    mark = matrix[rr][cc]
+                    # only overlay on markers above door codes
+                    if mark >= T_DOOR_O + 1:
+                        col = col_by_marker.get(mark, (0,0,0,128))
+                        s = pygame.Surface((int(PIXEL_ONE_X),int(PIXEL_ONE_Y)), pygame.SRCALPHA)
+                        s.fill(col)
+                        self.screen.blit(s, (cc*PIXEL_ONE_X, rr*PIXEL_ONE_Y))
+
+    # ── ENEMY SETUP ───────────────────────────────────────
     def level_changes(self):
         region = get_region(self.patrolling_area)
-        patrol_routes = generate_guard_patrol_routes(region, self.guard_count, self.difficulty)
-        route_colors = [
-            (0, 0, 255, 128),
-            (255, 0, 0, 128),
-            (0, 255, 0, 128),
-            (255, 255, 0, 128),
-            (255, 0, 255, 128),
-            (0, 255, 255, 128)
+        routes = generate_guard_patrol_routes(region, self.guard_count, self.difficulty)
+        palette = [
+            (0,0,255,128),(255,0,0,128),(0,255,0,128),
+            (255,255,0,128),(255,0,255,128),(0,255,255,128)
         ]
-        for i, route in enumerate(patrol_routes):
-            if not route:
+        for i, rt in enumerate(routes):
+            if not rt:
                 continue
-            spawn_cell = route[0]
-            spawn_x = spawn_cell[0] * PIXEL_ONE_X + PIXEL_ONE_X / 2
-            spawn_y = spawn_cell[1] * PIXEL_ONE_Y + PIXEL_ONE_Y / 2
-            print(f"Guard {i} patrol route:", route)
-            enemy = Enemy((spawn_x, spawn_y), route, move_speed=3, update_interval=1)
-            enemy.route_marker = 5 + i
-            enemy.route_color = route_colors[i % len(route_colors)]
-            self.enemies.append(enemy)
+            sx = rt[0][0]*PIXEL_ONE_X + PIXEL_ONE_X/2
+            sy = rt[0][1]*PIXEL_ONE_Y + PIXEL_ONE_Y/2
+            en = Enemy((sx, sy), rt, move_speed=3, update_interval=1)
+            # shift markers past the door codes
+            en.route_marker = T_DOOR_O + 1 + i
+            en.route_color  = palette[i % len(palette)]
+            self.enemies.append(en)
 
+    # ── MAIN LOOP ─────────────────────────────────────────
     def game_loop(self):
-        # Show the front-screen options menu.
+        self.show_main_menu()
         self.options_screen()
-        # Set up level changes (patrol routes and enemies).
         self.level_changes()
+
         running = True
         while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+            if self.player.get_win():
+                veil = pygame.Surface((SIZE_X, SIZE_Y), pygame.SRCALPHA)
+                veil.fill((0,0,0,180))
+                self.screen.blit(veil, (0,0))
+                txt = self.font_big.render("YOU WON", True, (255,255,255))
+                self.screen.blit(txt, txt.get_rect(center=(SIZE_X//2, SIZE_Y//2)))
+                pygame.display.flip()
+                time.sleep(3)
+                return
+
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
                     running = False
-            self.screen.blit(self.background, (0, 0))
-            self.draw_map()
-            self.player.move()
-            player_pos = self.player.get_position()
-            for enemy in self.enemies:
-                enemy.update(player_pos)
-            self.player.draw(self.screen)
-            for enemy in self.enemies:
-                enemy.draw(self.screen)
+                elif e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_ESCAPE:
+                        running = False
+                    elif e.key == pygame.K_p:
+                        self.paused = not self.paused
+                    elif e.key == pygame.K_k and not self.paused:
+                        self.overlay = not self.overlay
+                    elif e.key == pygame.K_h:
+                        self.help_on = not self.help_on
+                        self.paused  = self.help_on or self.paused
+
+            if not self.paused:
+                self.screen.blit(self.bg_level, (0,0))
+                self.draw_map()
+
+                # move player
+                self.player.move()
+                px, py = self.player.get_position()
+                col, row = int(px//PIXEL_ONE_X), int(py//PIXEL_ONE_Y)
+
+                # pick up key
+                if not self.player.has_key and matrix[row][col] == T_KEY:
+                    self.player.has_key = True
+                    matrix[row][col] = T_FLOOR
+
+                # open door when adjacent
+                if self.player.has_key and self.door_pos is not None:
+                    dr, dc = self.door_pos
+                    if self.player.near_door((dr, dc)):
+                        matrix[dr][dc] = T_DOOR_O
+
+                # update & draw enemies
+                ppx = self.player.get_position()
+                for en in self.enemies:
+                    en.update(ppx)
+
+                self.player.draw(self.screen)
+                for en in self.enemies:
+                    en.draw(self.screen)
+            else:
+                self.draw_paused()
+
+            if self.help_on:
+                self.draw_help()
+
             pygame.display.flip()
             self.clock.tick(60)
+
         pygame.quit()
 
+    # ── overlay‑toggle pre‑game screen ──────────────────────────
+    def options_screen(self):
+        font, show = pygame.font.SysFont(None,36), True
+        while True:
+            self.screen.fill((0,0,0))
+            txts = [
+                f"Show Enemy Patrol Overlay: {'ON' if show else 'OFF'} (K)",
+                "Press ENTER to continue"
+            ]
+            for i,t in enumerate(txts):
+                self.screen.blit(font.render(t,True,(255,255,255)),(50,50+i*40))
+            pygame.display.flip()
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    pygame.quit(); exit()
+                if e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_k:
+                        show = not show
+                    elif e.key == pygame.K_RETURN:
+                        self.overlay = show
+                        return
+
 if __name__ == "__main__":
-    game = Game()
-    game.game_loop()
+    Game().game_loop()

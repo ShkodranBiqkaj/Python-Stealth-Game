@@ -3,7 +3,7 @@ import time
 from collections import deque
 import pygame
 
-from constants.matrix_sizes import PIXEL_ONE_X, PIXEL_ONE_Y, matrix, GRID_ROWS, GRID_COLS
+from matrix_sizes import PIXEL_ONE_X, PIXEL_ONE_Y, matrix, GRID_ROWS, GRID_COLS
 
 class Enemy:
     def __init__(self, position, patrol_route, move_speed=1.3, update_interval=1):
@@ -156,14 +156,14 @@ class Enemy:
         """
         enemy_cell = self.pixel_to_grid(self.position)
         player_cell = self.pixel_to_grid(player_pos)
-        line = self.bresenham_line(enemy_cell[0], enemy_cell[1], player_cell[0], player_cell[1])
+        line = self.line_of_sight(enemy_cell[0], enemy_cell[1], player_cell[0], player_cell[1])
         for cell in line:
             col, row = cell
             if matrix[row][col] == 0:
                 return False
         return True
 
-    def bresenham_line(self, x0, y0, x1, y1):
+    def line_of_sight(self, x0, y0, x1, y1):
         """
         Bresenham's Line Algorithm.
         Returns a list of grid cells from (x0, y0) to (x1, y1).
