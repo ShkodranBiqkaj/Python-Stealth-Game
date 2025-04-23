@@ -18,9 +18,6 @@ from matrix_sizes import (
 from Player import Player
 from Enemy import Enemy
 
-# ──────────────────────────────────────────────────────────────────
-# Helper functions (unchanged)
-# ──────────────────────────────────────────────────────────────────
 def get_neighbors(cell):
     col, row = cell
     return [(col+1, row), (col, row+1), (col-1, row), (col, row-1)]
