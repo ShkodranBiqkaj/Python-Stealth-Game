@@ -1,0 +1,100 @@
+@startuml Extra-Detailed
+'–– hide the little stereotype icon if you like ––
+skinparam classAttributeIconSize 0
+
+package "Graphics" {
+  class DeveloperOptions {
+    - …your fields here…
+    --
+    + …your methods here…
+  }
+  class MainGraphics {
+    - …fields…
+    --
+    + …methods…
+  }
+  class Map {
+    - …fields…
+    --
+    + …methods…
+  }
+  class Pause {
+    - …fields…
+    --
+    + …methods…
+  }
+  class PostGameMenu {
+    - …fields…
+    --
+    + …methods…
+  }
+  class Screen {
+    - width: int
+    - height: int
+    --
+    + render(): void
+    + clear(): void
+  }
+  class StartUp {
+    - configFile: String
+    --
+    + loadConfig(path: String): bool
+    + initGraphics(): void
+  }
+}
+
+package "Logic" {
+  class Enemy {
+    - health: int
+    - position: Point
+    --
+    + takeDamage(amount: int): void
+    + patrol(): void
+  }
+  class LogicSetup {
+    - …fields…
+    --
+    + initializeGame(): void
+    + loadLevel(id: int): bool
+  }
+  class MapCreation {
+    - …fields…
+    --
+    + createMap(): Map
+    + …other methods…
+  }
+  class Patrol {
+    - route: List<Point>
+    --
+    + followRoute(): void
+    + detectPlayer(): bool
+  }
+  class Player {
+    - x: int
+    - y: int
+    - speed: float
+    --
+    + move(direction: String): void
+    + hide(): bool
+  }
+}
+
+class Main {
+    + main(args: String[]): void
+}
+
+/'–– draw use‐arrows from Main into everything it “uses” ––'/
+Main --> DeveloperOptions
+Main --> MainGraphics
+Main --> Map
+Main --> Pause
+Main --> PostGameMenu
+Main --> Screen
+Main --> StartUp
+Main --> Enemy
+Main --> LogicSetup
+Main --> MapCreation
+Main --> Patrol
+Main --> Player
+
+@enduml
