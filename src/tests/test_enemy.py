@@ -176,9 +176,9 @@ def test_check_collision_wall(small_enemy):
     assert small_enemy.check_collision((px, py))
 
 def test_check_collision_out_of_bounds(small_enemy):
-    # negative pixel → column,row = (-1,-1)
+    # negative pixel -> column,row = (-1,-1)
     assert small_enemy.check_collision(-1, -1)
-    # pixel just past right edge (3*10 = 30 px) → out-of-bounds
+    # pixel just past right edge (3*10 = 30 px) -> out-of-bounds
     assert small_enemy.check_collision(30, 5)
     # and via tuple style
     assert small_enemy.check_collision((5, 30))
@@ -189,11 +189,11 @@ def test_get_neighbors_interior(enemy):
     assert nbrs == {(2,1), (0,1), (1,2), (1,0)}
 
 @pytest.mark.parametrize("cell,expected", [
-    # top-left corner → only right & down
+    # top-left corner -> only right & down
     ((0,0), {(1,0), (0,1)}),
-    # right edge center → left, up, down
+    # right edge center -> left, up, down
     ((2,1), {(1,1), (2,2), (2,0)}),
-    # bottom-right corner → left & up
+    # bottom-right corner -> left & up
     ((2,2), {(1,2), (2,1)}),
 ])
 def test_get_neighbors_edges(enemy, cell, expected):
@@ -208,7 +208,7 @@ def test_find_path_reachable(enemy):
     target_px = enemy.grid_to_pixel((2,2))
     enemy.find_path(target_px)
 
-    # 4) Expected shortest path is right→right→down→down
+    # 4) Expected shortest path is right->right->down->down
     assert enemy.path == [
         (0,0), (1,0), (2,0), (2,1), (2,2)
     ]
@@ -259,7 +259,7 @@ def validate_path(enemy, path, start, goal):
     for a, b in zip(path, path[1:]):
         # neighbor check
         nbrs = enemy.get_neighbors(a)
-        assert b in nbrs, f"Step {a} → {b} not neighbors: {nbrs}"
+        assert b in nbrs, f"Step {a} -> {b} not neighbors: {nbrs}"
         # walkable check
         assert enemy.is_walkable(b), f"Cell {b} is not walkable"
 
@@ -304,7 +304,7 @@ def test_move_patrol_area_index_wraps(enemy):
     enemy.patrol_speed = 100    # force snap-to-next-cell
     enemy.move_patrol_area()
 
-    # 1) patrol_index wrapped 5→0 and then advanced to 1
+    # 1) patrol_index wrapped 5->0 and then advanced to 1
     assert enemy.patrol_index == 1
 
     # 2) position snapped to the *next* step on the way to (1,1):
@@ -322,7 +322,7 @@ def test_move_patrol_area_partial_step(enemy):
     enemy.patrol_index = 1
     # Start at the center of (0,0)
     enemy.position = enemy.grid_to_pixel((0,0))
-    # Speed = 5px, half the 10px tile height → partial step
+    # Speed = 5px, half the 10px tile height -> partial step
     enemy.patrol_speed = 5
 
     start_px = enemy.position
@@ -353,7 +353,7 @@ def test_move_patrol_area_exact_speed_no_index_advance(enemy):
     enemy.patrol_index = 1
     # Start at (0,0)
     enemy.position = enemy.grid_to_pixel((0,0))
-    # Distance from (0,0)→(0,1) is 10px; set speed equal to 10px
+    # Distance from (0,0)->(0,1) is 10px; set speed equal to 10px
     enemy.patrol_speed = 10
     next_px = enemy.grid_to_pixel((0,1))
 
@@ -406,4 +406,130 @@ def test_move_patrol_area_full_step(enemy):
     # And patrol_index should now be 1 (pointing at the next route entry)
     assert enemy.patrol_index == 1
 
+#test for find_nearest_walkable
+def test_find_nearest_walkable_starting_cell(enemy):
+    """
+    If the enemy's current cell is already walkable, find_nearest_walkable
+    must return that same grid-cell.
+    """
+    start_cell = enemy.pixel_to_grid(enemy.position)
+    # by default our fixture uses a fully walkable matrix
+    assert enemy.is_walkable(start_cell)
+    assert enemy.find_nearest_walkable() == start_cell
 
+def test_find_nearest_walkable_one_step(enemy):
+    """
+    If the starting cell is blocked, BFS should find the nearest adjacent
+    walkable neighbor.
+    """
+    # block the start cell
+    start = enemy.pixel_to_grid(enemy.position)
+    enemy.matrix[start[1]][start[0]] = 0
+    # ensure at least one neighbor is walkable
+    nbrs = enemy.get_neighbors(start)
+    assert nbrs, "grid too small to have neighbors"
+    # pick the first neighbor (should be walkable in our default matrix)
+    expected = nbrs[0]
+    assert enemy.is_walkable(expected)
+    assert enemy.find_nearest_walkable() == expected
+
+def test_find_nearest_walkable_multi_step(enemy):
+    """
+    If immediate neighbors are also blocked, BFS must expand outward.
+    """
+    # 3×3 matrix, start at center (1,1)
+    enemy.position = enemy.grid_to_pixel((1,1))
+    # block center and its 4 direct neighbors
+    blocks = [(1,1),(2,1),(0,1),(1,2),(1,0)]
+    for c,r in blocks:
+        enemy.matrix[r][c] = 0
+    # now the nearest walkable should be one of the diagonals: (0,0),(0,2),(2,0),(2,2)
+    result = enemy.find_nearest_walkable()
+    assert result in {(0,0),(0,2),(2,0),(2,2)}
+
+def test_find_nearest_walkable_none(enemy):
+    """
+    If no cells are walkable, returns None.
+    """
+    # fill entire matrix with walls
+    enemy.matrix = [[0 for _ in range(enemy.GRID_COLS)]
+                    for _ in range(enemy.GRID_ROWS)]
+    assert enemy.find_nearest_walkable() is None
+
+#find_path_between()
+def validate_path(enemy, path, start, goal):
+    assert path[0] == start
+    assert path[-1] == goal
+    for a, b in zip(path, path[1:]):
+        assert b in enemy.get_neighbors(a)
+        assert enemy.is_walkable(b)
+
+@pytest.mark.parametrize("start,goal,expected", [
+    ((0,0),(0,0), [(0,0)]),                  # same cell
+    ((0,0),(2,0), [(0,0),(1,0),(2,0)]),       # straight line
+    ((0,0),(0,2), [(0,0),(0,1),(0,2)]),
+])
+def test_find_path_between_trivial(start, goal, expected, enemy):
+    path = enemy.find_path_between(start, goal)
+    assert path == expected
+
+def test_find_path_between_diagonal(enemy):
+    start, goal = (0,0), (1,1)
+    path = enemy.find_path_between(start, goal)
+    validate_path(enemy, path, start, goal)
+    mdist = abs(start[0]-goal[0]) + abs(start[1]-goal[1])
+    assert len(path) == mdist + 1
+
+def test_find_path_between_blocked_start_or_goal(enemy):
+    # block start
+    enemy.matrix[0][0] = 0
+    assert enemy.find_path_between((0,0),(2,2)) == []
+    # restore and block goal
+    enemy.matrix[0][0] = 1
+    enemy.matrix[2][2] = 0
+    assert enemy.find_path_between((0,0),(2,2)) == []
+
+def test_find_path_between_unreachable(enemy):
+    # block the middle column in a 3×3
+    for r in range(enemy.GRID_ROWS):
+        enemy.matrix[r][1] = 0
+    assert enemy.find_path_between((0,0),(2,2)) == []
+
+#test for line_of_sight
+def test_los_trivial(enemy):
+    """Same start and end should return just that point."""
+    assert enemy.line_of_sight(1, 1, 1, 1) == [(1, 1)]
+
+def test_los_straight(enemy):
+    """Horizontal and vertical straight lines."""
+    assert enemy.line_of_sight(0, 2, 3, 2) == [(0,2), (1,2), (2,2), (3,2)]
+    assert enemy.line_of_sight(2, 0, 2, 3) == [(2,0), (2,1), (2,2), (2,3)]
+
+def test_los_diagonal(enemy):
+    """Perfect 45° diagonal."""
+    assert enemy.line_of_sight(0, 0, 2, 2) == [(0,0), (1,1), (2,2)]
+
+def test_los_mixed_slope(enemy):
+    """Slope < 1 and > 1 cases in one go."""
+    assert enemy.line_of_sight(0, 0, 3, 1) == [(0,0), (1,0), (2,1), (3,1)]
+    assert enemy.line_of_sight(1, 0, 2, 3) == [(1,0), (1,1), (2,2), (2,3)]
+
+#test for can_see_player()
+@pytest.mark.parametrize(
+    "enemy_cell, player_cell, blocked, expected",
+    [
+        ((1, 1), (1, 1), [], True),            # same cell -> True
+        ((0, 1), (2, 1), [], True),            # clear horizontal line -> True
+        ((0, 0), (2, 0), [(1, 0)], False),     # block at (1,0) -> False
+    ]
+)
+def test_can_see_player(enemy, enemy_cell, player_cell, blocked, expected):
+    # arrange the position of enemy and optionally insert walls
+    enemy.position = enemy.grid_to_pixel(enemy_cell)
+    for c, r in blocked:
+        enemy.matrix[r][c] = 0
+    # Act
+    player_pos = enemy.grid_to_pixel(player_cell)
+    result = enemy.can_see_player(player_pos)
+    # Assert
+    assert result is expected

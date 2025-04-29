@@ -33,7 +33,7 @@ class PostGameMenu:
 
         while True:
             self.screen.fill((0, 0, 0))
-            # Draw title
+            #Draw title
             txt = self.font.render(title, True, (255, 255, 255))
             rect = txt.get_rect(center=(self.screen.get_width() // 2,
                                          self.screen.get_height() // 3))

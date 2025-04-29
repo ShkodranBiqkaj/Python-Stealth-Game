@@ -2,7 +2,7 @@
 
 import pygame
 import time
-from .Map_creation import T_FLOOR, T_KEY, T_HIDDEN, T_DOOR_C, T_DOOR_O, T_WALL
+from .map_creation import T_FLOOR, T_KEY, T_HIDDEN, T_DOOR_C, T_DOOR_O, T_WALL
 
 class Player:
     def __init__(self, player_pos_x, player_pos_y, matrix, PIXEL_ONE_X, PIXEL_ONE_Y):
@@ -110,7 +110,7 @@ class Player:
 
     def check_collision(self, x, y):
         """
-        Four‐corner test against walls and out‐of‐bounds.
+        Four-corner test against walls and out-of-bounds.
         Returns True if there's a collision.
         """
         corners = [
@@ -121,10 +121,10 @@ class Player:
         ]
         for cx, cy in corners:
             col, row = self.pixel_to_grid((cx, cy))
-            # Out of bounds?
+            # Out of bounds
             if not (0 <= row < len(self.matrix) and 0 <= col < len(self.matrix[0])):
                 return True
-            # Wall collision?
+            # Wall collision
             if self.matrix[row][col] == T_WALL:
                 return True
         return False
@@ -146,3 +146,4 @@ class Player:
 
     def get_position(self):
         return (self.pos_X, self.pos_Y)
+

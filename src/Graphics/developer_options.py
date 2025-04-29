@@ -1,8 +1,9 @@
 # options.py
 import pygame
-from .screen import SIZE_X,SIZE_Y
+from Graphics.main_menu import SIZE_X,SIZE_Y
 
-class Developer_Options:
+
+class DeveloperOptions:
     """
     Let player pick difficulty, rows, cols, enemy count.
     Controls:
@@ -24,13 +25,13 @@ class Developer_Options:
         self.enemy_count     = 2
 
 
-    def show(self):
-        # create window & clock
+    def draw_developer_options(self):
+        #create window & clock
         screen = pygame.display.set_mode((SIZE_X, SIZE_Y))
         pygame.display.set_caption("Maze Options")
         clock  = pygame.time.Clock()
         menu_bg = pygame.transform.scale(
-            pygame.image.load("Assets/Menu_sc.jpg").convert(),
+            pygame.image.load("Assets/Menu_sc.png").convert(),
             (SIZE_X, SIZE_Y)
         )
 
@@ -55,7 +56,7 @@ class Developer_Options:
 
             pygame.display.flip()
 
-            # handle input
+            #handle input
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     pygame.quit()

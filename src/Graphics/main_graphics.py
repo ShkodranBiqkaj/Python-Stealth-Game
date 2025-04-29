@@ -1,16 +1,16 @@
-from .start_up import start_up
-from .developer_options import Developer_Options
-from .map import MapRenderer
+from .main_menu import Main_Menu
+from .developer_options import DeveloperOptions
+from .map_renderer import MapRenderer
 import pygame
+from Graphics.main_menu import SIZE_X,SIZE_Y
 
-SIZE_X, SIZE_Y = 1000, 750
 
 class MainGraphics:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((SIZE_X, SIZE_Y))  # <--- ADD THIS FIRST
-        self.start_menu = start_up()
-        self.developer_options = Developer_Options()
+        self.screen = pygame.display.set_mode((SIZE_X, SIZE_Y))
+        self.start_menu = Main_Menu()
+        self.developer_options = DeveloperOptions()
 
         # Default settings
         self.maze_difficulty = "hard"
@@ -35,13 +35,13 @@ class MainGraphics:
             pygame.image.load("assets/Door_open.png").convert_alpha(), (40, 40)
         )
 
-    def pre_game(self):
+    def draw_pre_game(self):
         """Display menu and allow player to configure settings."""
         self.menu_choice = self.start_menu.show_main_menu()
-        if self.menu_choice == 1:  # Developer Mode selected
-            self.maze_difficulty, self.rows, self.cols, self.enemy_count = self.developer_options.show()
+        if self.menu_choice == 1:
+            self.maze_difficulty, self.rows, self.cols, self.enemy_count = self.developer_options.draw_developer_options()
 
-    def in_game(
+    def draw_map_in_game(
         self,
         border_tuples,
         matrix,
@@ -71,6 +71,6 @@ class MainGraphics:
         )
         self.map_renderer.draw_map()
 
-    def get_logic_attributes(self):
+    def get_logic_creation_attributes(self):
         """Provide the logic setup needed for the main game."""
         return self.maze_difficulty, self.rows, self.cols, self.enemy_count

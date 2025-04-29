@@ -26,7 +26,7 @@ class Enemy:
         self.GRID_COLS = grid_cols
         self.PIXEL_ONE_X, self.PIXEL_ONE_Y = tile_size
 
-        # state & movement
+        #state & movement
         self.position = position  # pixel coords (x, y)
         self.patrol_speed = move_speed
         self.alert_speed = 2.6
@@ -34,7 +34,7 @@ class Enemy:
         self.last_update_time = time.time()
         self.matrix = matrix
 
-        # load normal enemy images
+        #load normal enemy images
         self.images = {
             'down': [
                 pygame.transform.scale(
@@ -113,13 +113,13 @@ class Enemy:
         self.direction = 'down'
         self.current_image = self.images[self.direction][self.current_frame]
 
-        # patrol & alert data
-        self.complete_patrol_route = patrol_route  # list of (col,row)
+        #patrol and alert data
+        self.complete_patrol_route = patrol_route  #list of (col,row)
         self.patrol_index = 0
-        self.path = []  # BFS path in alert mode
+        self.path = []  #the BFS path in alert mode
 
         # AI state
-        self.state = "patrol"  # or "alert"
+        self.state = "patrol"  #or "alert"
         self.patrol_index_backup = None
 
         # overlay attributes (set by PatrolGenerator)
@@ -260,7 +260,6 @@ class Enemy:
                     queue.append(nb)
         if goal not in came_from:
             return []
-        # reconstruct
         path = []
         node = goal
         while node is not None:
@@ -317,13 +316,11 @@ class Enemy:
         self.update_animation(dx, dy)
 
     def move_alert(self, player_pos):
-        # 1) If you lose LoS, drop back to patrol.
         if not self.can_see_player(player_pos):
             self.state = "patrol"
             self.move_patrol_area()
             return
 
-        # 2) Recompute path immediately when empty, or every interval.
         now = time.time()
         if not self.path or now - self.last_update_time >= self.update_interval:
             self.find_path(player_pos)
@@ -332,7 +329,6 @@ class Enemy:
         if not self.path:
             return
 
-        # 3) Step toward next path cell
         next_cell = self.path[0]
         target_px = self.grid_to_pixel(next_cell)
         dx = target_px[0] - self.position[0]
@@ -341,7 +337,6 @@ class Enemy:
         if dist > 0:
             dx /= dist; dy /= dist
 
-        # 4) Move & animate
         new_pos = (
             self.position[0] + dx * self.alert_speed,
             self.position[1] + dy * self.alert_speed

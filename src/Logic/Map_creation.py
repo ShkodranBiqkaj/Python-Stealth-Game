@@ -1,6 +1,4 @@
 import random
-
-# ── Tile codes ─────────────────────────────────────────────────────────
 T_WALL    = 0  # crate / wall
 T_FLOOR   = 1  # open floor
 T_PLAYER  = 2  # player start
@@ -77,7 +75,7 @@ class MapCreation:
             for r in range(r0, r1):
                 for c in range(c0, c1):
                     if maze[r][c] == T_WALL:
-                        # count adjacent floor
+                        #count adjacent floor
                         cnt = sum(
                             1 for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]
                             if 0 <= r+dr < R and 0 <= c+dc < C and maze[r+dr][c+dc] == T_FLOOR

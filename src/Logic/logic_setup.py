@@ -1,13 +1,13 @@
 # src/Logic/logic_setup.py
 
-from .Map_creation import (
+from .map_creation import (
     MapCreation,
     T_FLOOR, T_KEY, T_DOOR_C, T_DOOR_O,
     T_WALL, T_HIDDEN
 )
-from .Patrol import PatrolGenerator
+from .patrol_generator import PatrolGenerator
 from .enemy import Enemy
-from .Player import Player
+from .player import Player
 from collections import deque
 
 SIZE_X, SIZE_Y = 1000, 750
@@ -22,14 +22,14 @@ class LogicSetup:
         self.difficulty  = difficulty
 
     def generate_game(self):
-        # 1) Generate maze and compute grid metrics
+        #Generate maze and compute grid metrics
         self.matrix     = self.map_gen.generate_maze()
         self.GRID_ROWS  = len(self.matrix)
         self.GRID_COLS  = len(self.matrix[0])
         self.PIXEL_ONE_X = SIZE_X / self.GRID_COLS
         self.PIXEL_ONE_Y = SIZE_Y / self.GRID_ROWS
 
-        # 2) Find player start (bottom-leftmost floor cell)
+        # Find player start (bottom-leftmost floor cell)
         self.player_start_cell = self._find_start_cell()
         px, py = self.player_start_cell
         self.player = Player(
@@ -40,10 +40,10 @@ class LogicSetup:
             self.PIXEL_ONE_Y
         )
 
-        # 3) Place key and closed door in matrix
+        # Place key and closed door in matrix
         self.key_pos, self.door_pos = self._place_key_and_door()
 
-        # 4) Instantiate Enemy objects with proper tile_size
+        #Instantiate Enemy objects with proper tile_size
         self.enemies = [
             Enemy(
                 position=(0, 0),
@@ -58,7 +58,7 @@ class LogicSetup:
             for _ in range(self.enemy_count)
         ]
 
-        # 5) Generate patrol routes and assign to enemies
+        # Generate patrol routes and assign to enemies
         PatrolGenerator(
             matrix=self.matrix,
             grid_cols=self.GRID_COLS,
@@ -80,7 +80,7 @@ class LogicSetup:
         self.player.move()
 
     def update(self):
-        # 1) Key pickup
+        # Key pickup
         px, py = self.player.get_position()
         col = int(px // self.PIXEL_ONE_X)
         row = int(py // self.PIXEL_ONE_Y)
@@ -89,20 +89,20 @@ class LogicSetup:
             self.player.has_key = True
             self.matrix[row][col] = T_FLOOR
 
-        # 2) Open door when adjacent
+        #Open door when adjacent
         if self.player.has_key and self.door_pos:
             dr, dc = self.door_pos
             if self.player.near_door((dr, dc)):
                 self.matrix[dr][dc] = T_DOOR_O
 
-        # 3) Update all enemies
+        # Update all enemies
         player_pos = self.player.get_position()
         for en in self.enemies:
             en.update(player_pos)
 
         self._check_enemy_collision()
         
-        # 4) Check win/lose
+        # Check win/lose
         return {
             'won':  self.player.get_win(),
             'lost': self.player.game_over
@@ -117,18 +117,17 @@ class LogicSetup:
 
     def _place_key_and_door(self):
         """
-        BFS from the player start to compute true shortest‐path
-        distances to every floor‐cell. Then place:
-          – door at the farthest cell (as before)
-          – key at the ‘median’ cell in that sorted list,
+        BFS from the player start to compute true shortest-path
+        distances to every floor-cell. Then place:
+           door at the farthest cell (as before)
+           key at the 'median' cell in that sorted list,
             so you have to traverse roughly half the maze.
         """
-        from collections import deque
 
         start = self.player_start_cell
         R, C = self.GRID_ROWS, self.GRID_COLS
 
-        # 1) BFS to build distance map
+        # BFS to build distance map
         dist = {start: 0}
         q = deque([start])
         while q:
@@ -141,18 +140,18 @@ class LogicSetup:
                     dist[nb] = dist[(c, r)] + 1
                     q.append(nb)
 
-        # 2) Sort all reachable (excluding start)
+        # Sort all reachable (excluding start)
         reachable = [cell for cell in dist.keys() if cell != start]
         reachable.sort(key=lambda cell: dist[cell])
 
-        # 3) Farthest = door
+        #Farthest = door
         door_cell = reachable[-1]
 
-        # 4) Median = key
+        # Median = key
         mid = len(reachable) // 2
         key_cell = reachable[mid]
 
-        # 5) Write to matrix
+        #  Write to matrix
         kx, ky = key_cell
         dx, dy = door_cell
         self.matrix[ky][kx] = T_KEY
@@ -161,7 +160,7 @@ class LogicSetup:
         return key_cell, door_cell
     
     def _check_enemy_collision(self):
-        """If any enemy shares the player’s grid‐cell, trigger game over."""
+        """If any enemy shares the player's grid-cell, trigger game over."""
         # get player cell
         px, py = self.player.get_position()
         pcol = int(px // self.PIXEL_ONE_X)
